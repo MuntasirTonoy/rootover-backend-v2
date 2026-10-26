@@ -1,0 +1,548 @@
+// Root Over Education data model. Mirrors BACKEND_SPEC section 4, plus
+// User.tokenVersion (revokes old tokens) and Cloudinary publicIds on uploaded files.
+// Enum values are lowercase where the frontend uses lowercase, so no mapping layer is needed.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  student
+  teacher
+  admin
+}
+
+enum ActorRole {
+  student
+  teacher
+  admin
+  system
+}
+
+enum UserStatus {
+  active
+  banned
+}
+
+enum Level {
+  SSC
+  HSC
+  BSc
+  BBA
+  BA
+  Others
+}
+
+enum ApplicationStatus {
+  pending_review
+  payment_required
+  under_verification
+  approved
+  rejected
+}
+
+enum CourseStatus {
+  draft
+  pending
+  approved
+  rejected
+  suspended
+}
+
+enum CouponType {
+  percent
+  fixed
+}
+
+enum PaymentMethod {
+  bKash
+  Nagad
+  Card
+}
+
+enum PurchaseStatus {
+  completed
+  refunded
+}
+
+enum WithdrawalStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ReportReason {
+  VIDEO_ISSUE
+  AUDIO_ISSUE
+  WRONG_CONTENT
+  INAPPROPRIATE_CONTENT
+  BROKEN_LINK
+  OTHER
+}
+
+enum ReportStatus {
+  open
+  fix_submitted
+  fix_rejected
+  resolved
+}
+
+enum OtpPurpose {
+  verify_email
+  reset_password
+}
+
+enum ReportEventType {
+  reported
+  fix_submitted
+  fix_approved
+  fix_rejected
+}
+
+model User {
+  id              String     @id @default(cuid())
+  name            String
+  // Stored trimmed and lowercase; compared case-insensitively at login
+  email           String     @unique
+  // bcrypt hash; never returned by the API
+  passwordHash    String
+  // Embedded in every access token; incrementing it (password change) revokes older tokens
+  tokenVersion    Int        @default(0)
+  // Set once the sign-up code is confirmed; login is refused until then
+  emailVerifiedAt DateTime?
+  role            Role       @default(student)
+  status          UserStatus @default(active)
+  avatar          String?
+  phone           String?
+  institution     String?
+  gender          String?
+  dateOfBirth     String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  teacherProfile   TeacherProfile?
+  applications     TeacherApplication[]
+  registrationFees RegistrationFee[]
+  purchases        Purchase[]
+  enrollments      Enrollment[]
+  savedLessons     SavedLesson[]
+  reviews          Review[]
+  videoReports     VideoReport[]        @relation("ReportReporter")
+  reportEvents     VideoReportEvent[]
+  activityLogs     ActivityLog[]
+  emailOtps        EmailOtp[]
+  payments         Payment[]
+  uploads          Upload[]
+}
+
+model TeacherProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teacherCode     String   @unique
+  headline        String   @default("New teacher on Root Over")
+  bio             String   @default("")
+  qualifications  String[]
+  institution     String   @default("")
+  experienceYears Int      @default(0)
+  joinedAt        DateTime @default(now())
+
+  application  TeacherApplication?
+  courses      Course[]
+  coupons      Coupon[]
+  sales        Purchase[]
+  withdrawals  Withdrawal[]
+  videoReports VideoReport[]
+}
+
+model TeacherApplication {
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName       String
+  nid            String
+  bkashNumber    String
+  tin            String
+  dateOfBirth    String
+  gender         String
+  // Each document: { url, publicId, name, type, size } (private Cloudinary asset)
+  photo          Json?
+  sscCertificate Json?
+  hscCertificate Json?
+  fatherVoterId  Json?
+  status         ApplicationStatus @default(pending_review)
+  reviewNote     String?
+  teacherId      String?           @unique
+  teacher        TeacherProfile?   @relation(fields: [teacherId], references: [id])
+  submittedAt    DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  registrationFee RegistrationFee?
+  payments        Payment[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model RegistrationFee {
+  id            String             @id @default(cuid())
+  applicationId String             @unique
+  application   TeacherApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Int
+  method        PaymentMethod      @default(bKash)
+  payerNumber   String
+  trxId         String             @unique
+  paidAt        DateTime           @default(now())
+
+  payment Payment?
+}
+
+model Course {
+  id            String         @id @default(cuid())
+  teacherId     String
+  teacher       TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  level         Level
+  subject       String
+  title         String
+  description   String
+  thumbnail     String?
+  outcomes      String[]
+  price         Int
+  discountPrice Int?
+  status        CourseStatus   @default(draft)
+  statusNote    String?
+  featured      Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  chapters     Chapter[]
+  reviews      Review[]
+  coupons      Coupon[]
+  purchases    Purchase[]
+  enrollments  Enrollment[]
+  savedLessons SavedLesson[]
+  videoReports VideoReport[]
+  payments     Payment[]
+
+  @@index([status])
+  @@index([teacherId])
+  @@index([level])
+}
+
+model Chapter {
+  id       String   @id @default(cuid())
+  courseId String
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title    String
+  position Int
+  lessons  Lesson[]
+
+  @@index([courseId, position])
+}
+
+model Lesson {
+  id          String  @id @default(cuid())
+  chapterId   String
+  chapter     Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  title       String
+  durationMin Int
+  // Always stored normalised: https://www.youtube.com/embed/<11-char id>
+  videoUrl    String
+  // Optional link to lesson notes (PDF / Google Drive)
+  noteLink    String?
+  isPreview   Boolean @default(false)
+  position    Int
+
+  completions LessonCompletion[]
+  savedBy     SavedLesson[]
+  reports     VideoReport[]
+
+  @@index([chapterId, position])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId   String?
+  student     User?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName String
+  rating      Int
+  comment     String
+  date        DateTime @default(now())
+
+  @@unique([courseId, studentId])
+}
+
+model Coupon {
+  id         String         @id @default(cuid())
+  teacherId  String
+  teacher    TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  code       String
+  type       CouponType
+  value      Int
+  expiresAt  DateTime
+  usageLimit Int
+  usedCount  Int            @default(0)
+  // null = applies to every course of this teacher
+  courseId   String?
+  course     Course?        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  active     Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+
+  payments Payment[]
+
+  @@unique([teacherId, code])
+}
+
+model Purchase {
+  id             String         @id @default(cuid())
+  studentId      String
+  student        User           @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  courseId       String
+  course         Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  teacherId      String
+  teacher        TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  listPrice      Int
+  coursePrice    Int
+  couponCode     String?
+  couponDiscount Int
+  amountPaid     Int
+  commission     Int
+  teacherNet     Int
+  method         PaymentMethod
+  trxId          String         @unique
+  status         PurchaseStatus @default(completed)
+  createdAt      DateTime       @default(now())
+
+  enrollment Enrollment?
+  payment    Payment?
+
+  @@index([teacherId, createdAt])
+  @@index([studentId])
+  @@index([courseId])
+}
+
+model Enrollment {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  purchaseId    String    @unique
+  purchase      Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  enrolledAt    DateTime  @default(now())
+  // Plain id (no FK) so deleting a lesson never breaks the enrollment
+  lastLessonId  String?
+  lastWatchedAt DateTime?
+
+  completions LessonCompletion[]
+
+  @@unique([studentId, courseId])
+}
+
+model LessonCompletion {
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId     String
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completedAt  DateTime   @default(now())
+
+  @@id([enrollmentId, lessonId])
+}
+
+model SavedLesson {
+  id        String   @id @default(cuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonId  String
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  savedAt   DateTime @default(now())
+
+  @@unique([studentId, lessonId])
+}
+
+model Withdrawal {
+  id            String           @id @default(cuid())
+  teacherId     String
+  teacher       TeacherProfile   @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  amount        Int
+  method        PaymentMethod    @default(bKash)
+  accountNumber String
+  status        WithdrawalStatus @default(pending)
+  requestedAt   DateTime         @default(now())
+  processedAt   DateTime?
+  note          String?
+
+  @@index([teacherId, status])
+}
+
+model ActivityLog {
+  id        String    @id @default(cuid())
+  actorId   String?
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  // Copied at write time so history survives later user changes
+  actorName String
+  actorRole ActorRole
+  action    String
+  target    String
+  at        DateTime  @default(now())
+
+  @@index([at])
+}
+
+model VideoReport {
+  id             String         @id @default(cuid())
+  lessonId       String
+  lesson         Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  // Copied from the lesson's course at creation for fast dashboard filters
+  courseId       String
+  course         Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacherId      String
+  teacher        TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  reporterId     String
+  reporter       User           @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reason         ReportReason
+  description    String?
+  status         ReportStatus   @default(open)
+  teacherNote    String?
+  adminNote      String?
+  fixSubmittedAt DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  events VideoReportEvent[]
+
+  @@index([teacherId, status])
+  @@index([status])
+  @@index([lessonId])
+}
+
+model VideoReportEvent {
+  id        String          @id @default(cuid())
+  reportId  String
+  report    VideoReport     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     User?           @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  // Copied at write time, like ActivityLog
+  actorName String
+  actorRole ActorRole
+  type      ReportEventType
+  note      String?
+  at        DateTime        @default(now())
+
+  @@index([reportId, at])
+}
+
+// One-time email codes (sign-up verification, password reset). Only an HMAC of
+// the code is stored. Issuing a new code consumes the previous ones.
+model EmailOtp {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose    OtpPurpose
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int        @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([userId, purpose, createdAt])
+}
+
+enum PaymentPurpose {
+  course_purchase
+  registration_fee
+}
+
+// initiated -> processing -> completed | failed; initiated -> cancelled | expired.
+// An expired payment can still complete if bKash later confirms it.
+enum PaymentState {
+  initiated
+  processing
+  completed
+  failed
+  cancelled
+  expired
+}
+
+// One checkout attempt through the payment provider (bKash Tokenized Checkout,
+// or the simulated provider in tests/dev). The purchase or registration fee is
+// written only after the provider confirms the payment.
+model Payment {
+  id                String              @id @default(cuid())
+  purpose           PaymentPurpose
+  // "bkash" | "simulated"
+  provider          String
+  userId            String
+  user              User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  courseId          String?
+  course            Course?             @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  applicationId     String?
+  application       TeacherApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  // Coupon use reserved at creation, released if the payment doesn't complete
+  couponId          String?
+  coupon            Coupon?             @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponReleased    Boolean             @default(false)
+  // The quote charged (course purchases), so the purchase records exactly this
+  quote             Json?
+  amount            Int
+  state             PaymentState        @default(initiated)
+  // The provider's id (bKash paymentID) and transaction id (trxID)
+  providerPaymentId String?             @unique
+  trxId             String?             @unique
+  // The wallet that paid (bKash customerMsisdn)
+  payerNumber       String?
+  failureReason     String?
+  purchaseId        String?             @unique
+  purchase          Purchase?           @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  registrationFeeId String?             @unique
+  registrationFee   RegistrationFee?    @relation(fields: [registrationFeeId], references: [id], onDelete: SetNull)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([state, createdAt])
+}
+
+enum UploadPurpose {
+  avatar
+  thumbnail
+  application_doc
+}
+
+// A file someone uploaded (POST /api/uploads). Avatars, thumbnails and
+// application documents may only reference the user's own uploads.
+model Upload {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   UploadPurpose
+  // Storage key (Cloudinary public_id); random, never derived from the file name
+  publicId  String        @unique
+  // Private files (application documents) have no public url: they are read
+  // through GET /api/uploads/private/:id, which hands out a short-lived link
+  private   Boolean
+  url       String?
+  format    String
+  // Detected from the file's bytes, not the extension
+  mime      String
+  // The original file name, for display only
+  name      String
+  size      Int
+  createdAt DateTime      @default(now())
+
+  @@index([userId, purpose])
+}
