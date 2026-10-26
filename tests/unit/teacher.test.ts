@@ -22,6 +22,11 @@ describe("toEmbedUrl (spec section 9)", () => {
 			"https://www.youtube.com/embed/dQw4w9WgXcQ",
 			"https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
 			"https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ",
+			"https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=youtu.be",
+			"https://m.youtube.com/watch?v=dQw4w9WgXcQ&feature=youtu.be",
+			"https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s&list=PLx&index=2",
+			"https://youtu.be/dQw4w9WgXcQ?si=abc123",
+			"https://www.youtube.com/live/dQw4w9WgXcQ?si=abc123",
 			'<iframe width="560" src="https://www.youtube.com/embed/dQw4w9WgXcQ" allowfullscreen></iframe>',
 			"  https://youtu.be/dQw4w9WgXcQ  ",
 		])
