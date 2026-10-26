@@ -371,9 +371,19 @@ describe("player, watch tracking and completion", () => {
 		expect((await watch("c-bsc-calculus", "c-ssc-physics-ch1-l1")).status).toBe(
 			404,
 		); // lesson of another course
+		// Teachers may track courses they bought; one who didn't is a no-op
 		expect(
 			(await watch("c-bsc-calculus", "c-bsc-calculus-ch1-l1", tokens["u-t1"]))
 				.status,
+		).toBe(204);
+		expect(
+			(
+				await watch(
+					"c-bsc-calculus",
+					"c-bsc-calculus-ch1-l1",
+					tokens["u-admin"],
+				)
+			).status,
 		).toBe(403);
 		const detail = await call("/courses/c-bsc-calculus", {
 			token: learner.token,
@@ -564,14 +574,15 @@ describe("My Classes, saved lessons, purchases and dashboard (demo student)", ()
 		expect(body.application).toBeNull();
 	});
 
-	it("is for students only", async () => {
-		for (const path of [
-			"/me/dashboard",
-			"/me/enrollments",
-			"/me/saved-lessons",
-			"/me/purchases",
-		])
+	it("is for students only (teachers also see their purchased courses)", async () => {
+		for (const path of ["/me/dashboard", "/me/saved-lessons", "/me/purchases"])
 			expect((await call(path, { token: tokens["u-t1"] })).status).toBe(403);
+		expect(
+			(await call("/me/enrollments", { token: tokens["u-t1"] })).status,
+		).toBe(200);
+		expect(
+			(await call("/me/enrollments", { token: tokens["u-admin"] })).status,
+		).toBe(403);
 		expect((await call("/me/dashboard")).status).toBe(401);
 	});
 });
