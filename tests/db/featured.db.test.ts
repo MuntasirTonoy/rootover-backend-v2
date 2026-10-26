@@ -1,13 +1,12 @@
-// Home page picks (admins feature courses and teachers) and teachers seeing the
-// courses they bought before becoming teachers. Everything is restored after.
+// Home page picks (admins feature teachers; featured courses are just the most
+// popular ones) and teachers seeing the courses they bought before becoming
+// teachers. Everything is restored after.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { api, prisma, startApp, tokenFor } from "./helpers.js";
 
 let app: ReturnType<typeof startApp>;
 let call: ReturnType<typeof api>;
 let admin: string;
-let live: { id: string; featured: boolean };
-let pending: { id: string };
 let teacher: { id: string; featured: boolean };
 const startedAt = new Date();
 
@@ -15,14 +14,6 @@ beforeAll(async () => {
 	app = startApp();
 	call = api(app.base);
 	admin = await tokenFor("u-admin");
-	live = await prisma.course.findFirstOrThrow({
-		where: { status: "approved", teacher: { user: { status: "active" } } },
-		select: { id: true, featured: true },
-	});
-	pending = await prisma.course.findFirstOrThrow({
-		where: { status: { not: "approved" } },
-		select: { id: true },
-	});
 	teacher = await prisma.teacherProfile.findFirstOrThrow({
 		where: {
 			user: { status: "active" },
@@ -33,10 +24,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-	await prisma.course.update({
-		where: { id: live.id },
-		data: { featured: live.featured },
-	});
 	await prisma.teacherProfile.update({
 		where: { id: teacher.id },
 		data: { featured: teacher.featured },
@@ -55,53 +42,34 @@ afterAll(async () => {
 	await app.close();
 });
 
-const feature = (kind: "courses" | "teachers", id: string, featured: boolean) =>
-	call(`/admin/${kind}/${id}/featured`, {
+const feature = (id: string, featured: boolean, token = admin) =>
+	call(`/admin/teachers/${id}/featured`, {
 		method: "PATCH",
-		token: admin,
+		token,
 		body: { featured },
 	});
 
-describe("featured courses and teachers", () => {
-	it("are admin-only", async () => {
-		const r = await call(`/admin/courses/${live.id}/featured`, {
+describe("featured teachers", () => {
+	it("are admin-only, and courses can't be featured by hand", async () => {
+		expect(
+			(await feature(teacher.id, true, await tokenFor("u-t1"))).status,
+		).toBe(403);
+		const course = await call("/admin/courses/c-ssc-physics/featured", {
 			method: "PATCH",
-			token: await tokenFor("u-t1"),
+			token: admin,
 			body: { featured: true },
 		});
-		expect(r.status).toBe(403);
-	});
-
-	it("only live courses can be featured", async () => {
-		const r = await feature("courses", pending.id, true);
-		expect(r.status).toBe(422);
-		expect(r.body.error.message).toBe(
-			"Only live (approved) courses can be featured.",
-		);
-	});
-
-	it("a featured course shows in ?featured=true, and leaves it when removed", async () => {
-		expect((await feature("courses", live.id, true)).body).toEqual({
-			id: live.id,
-			featured: true,
-		});
-		const ids = async () =>
-			(await call("/courses?featured=true&limit=50")).body.data.map(
-				(c: { id: string }) => c.id,
-			);
-		expect(await ids()).toContain(live.id);
-		await feature("courses", live.id, false);
-		expect(await ids()).not.toContain(live.id);
+		expect(course.status).toBe(404);
 	});
 
 	it("a featured teacher shows in /teachers?featured=true", async () => {
-		await feature("teachers", teacher.id, false);
+		await feature(teacher.id, false);
 		const ids = async () =>
 			(await call("/teachers?featured=true")).body.map(
 				(t: { id: string; featured: boolean }) => t.id,
 			);
 		expect(await ids()).not.toContain(teacher.id);
-		const r = await feature("teachers", teacher.id, true);
+		const r = await feature(teacher.id, true);
 		expect(r.body.featured).toBe(true);
 		expect(await ids()).toContain(teacher.id);
 		const all = (await call("/teachers")).body as { id: string }[];

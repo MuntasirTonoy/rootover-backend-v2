@@ -37,11 +37,6 @@ router.post(
 router.get("/teachers", validateRequest(V.listTeachers), C.listTeachers);
 // Home page picks
 router.patch(
-	"/courses/:id/featured",
-	validateRequest(V.setFeatured),
-	C.setCourseFeatured,
-);
-router.patch(
 	"/teachers/:id/featured",
 	validateRequest(V.setFeatured),
 	C.setTeacherFeatured,

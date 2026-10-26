@@ -84,8 +84,6 @@ export interface AdminCourseRow {
 	chapterCount: number;
 	lessonCount: number;
 	durationMin: number;
-	// Picked by an admin for the home page
-	featured: boolean;
 	createdAt: string;
 	updatedAt: string;
 }

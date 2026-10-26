@@ -45,16 +45,6 @@ const listStudents = async (req: Request, res: Response) => {
 	res.json(await AdminService.listStudents(query(req)));
 };
 
-const setCourseFeatured = async (req: Request, res: Response) => {
-	res.json(
-		await Featured.setCourseFeatured(
-			currentUser(req),
-			id(req),
-			req.body.featured,
-		),
-	);
-};
-
 const setTeacherFeatured = async (req: Request, res: Response) => {
 	res.json(
 		await Featured.setTeacherFeatured(
@@ -137,7 +127,6 @@ export const AdminController = {
 	listTeachers,
 	listStudents,
 	setUserStatus,
-	setCourseFeatured,
 	setTeacherFeatured,
 	listAdmins,
 	setUserRole,

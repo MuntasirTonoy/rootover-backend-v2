@@ -47,7 +47,7 @@ const suspendCourse = idParam.extend({
 	body: z.object({ reason: reason("Give a reason for the suspension.") }),
 });
 
-// Home page picks (courses and teachers)
+// Home page picks (teachers)
 const setFeatured = idParam.extend({
 	body: z.object({
 		featured: z.boolean({ error: "featured must be true or false." }),
