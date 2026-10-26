@@ -2,7 +2,7 @@ import type { Server } from "http";
 import app from "./app.js";
 import { mailerMode } from "./app/lib/mailer.js";
 import prisma from "./app/lib/prisma.js";
-import config from "./config/index.js";
+import config, { BKASH_URLS } from "./config/index.js";
 
 let server: Server | undefined;
 
@@ -25,6 +25,10 @@ async function bootstrap() {
 				: "Email: no RESEND_API_KEY, emails are printed to this console",
 		);
 
+		if (config.payment.provider === "bkash" && !config.payment.bkash.known_url)
+			console.warn(
+				`Payments: BKASH_BASE_URL is not a known bKash URL (sandbox ${BKASH_URLS.sandbox}, live ${BKASH_URLS.live})`,
+			);
 		if (config.env === "production" && config.payment.bkash.sandbox)
 			console.warn(
 				"Payments: bKash SANDBOX in production; no real money will be collected",

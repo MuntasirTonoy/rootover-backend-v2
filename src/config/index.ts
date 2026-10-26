@@ -5,6 +5,12 @@ import { z } from "zod";
 // Load .env file
 dotenv.config({ path: path.join(process.cwd(), ".env"), quiet: true });
 
+// bKash Tokenized Checkout base URLs (BKASH_BASE_URL picks one)
+export const BKASH_URLS = {
+	sandbox: "https://tokenized.sandbox.bka.sh/v1.2.0-beta",
+	live: "https://tokenized.pay.bka.sh/v1.2.0-beta",
+} as const;
+
 // Rejects empty values and the "replace_me" placeholders copied from .env.example
 const required = (name: string) =>
 	z
@@ -64,10 +70,8 @@ const envSchema = z
 		// "bkash" (Tokenized Checkout) or "simulated" (no money moves; tests and
 		// local dev). Defaults to bkash when the BKASH_* credentials are set.
 		PAYMENT_PROVIDER: z.enum(["bkash", "simulated"]).optional(),
-		// bKash Tokenized Checkout. Sandbox: https://tokenized.sandbox.bka.sh/v1.2.0-beta
-		BKASH_BASE_URL: z
-			.url()
-			.default("https://tokenized.sandbox.bka.sh/v1.2.0-beta"),
+		// bKash Tokenized Checkout: BKASH_URLS.sandbox (default) or BKASH_URLS.live
+		BKASH_BASE_URL: z.url().default(BKASH_URLS.sandbox),
 		BKASH_USERNAME: z.string().optional(),
 		BKASH_PASSWORD: z.string().optional(),
 		BKASH_APP_KEY: z.string().optional(),
@@ -167,6 +171,10 @@ export default {
 		bkash: {
 			base_url: env.BKASH_BASE_URL.replace(/\/$/, ""),
 			sandbox: env.BKASH_BASE_URL.includes("sandbox"),
+			// False for a typo or a URL bKash didn't publish (warned at startup)
+			known_url: (Object.values(BKASH_URLS) as string[]).includes(
+				env.BKASH_BASE_URL.replace(/\/$/, ""),
+			),
 			username: env.BKASH_USERNAME ?? "",
 			password: env.BKASH_PASSWORD ?? "",
 			app_key: env.BKASH_APP_KEY ?? "",
