@@ -154,6 +154,8 @@ model TeacherProfile {
   institution     String   @default("")
   experienceYears Int      @default(0)
   joinedAt        DateTime @default(now())
+  // Picked by an admin for the home page ("Featured teachers")
+  featured        Boolean  @default(false)
 
   application  TeacherApplication?
   courses      Course[]

@@ -47,6 +47,13 @@ const suspendCourse = idParam.extend({
 	body: z.object({ reason: reason("Give a reason for the suspension.") }),
 });
 
+// Home page picks (courses and teachers)
+const setFeatured = idParam.extend({
+	body: z.object({
+		featured: z.boolean({ error: "featured must be true or false." }),
+	}),
+});
+
 // ---------------------------------------------------------------- people
 
 const listTeachers = z.object({
@@ -126,6 +133,7 @@ export const AdminValidation = {
 	listTeachers,
 	listStudents,
 	setUserStatus,
+	setFeatured,
 	setUserRole,
 	listRegistrationFees,
 	listTransactions,

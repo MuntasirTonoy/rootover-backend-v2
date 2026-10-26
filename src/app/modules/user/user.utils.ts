@@ -28,4 +28,5 @@ export const toTeacherProfileResponse = (
 	institution: teacher.institution,
 	experienceYears: teacher.experienceYears,
 	joinedAt: teacher.joinedAt.toISOString(),
+	featured: teacher.featured,
 });

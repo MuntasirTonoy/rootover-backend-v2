@@ -26,4 +26,6 @@ export interface TeacherProfileResponse {
 	institution: string;
 	experienceYears: number;
 	joinedAt: string;
+	// Picked by an admin for the home page
+	featured: boolean;
 }

@@ -17,9 +17,17 @@ import { toTeacherPublic } from "../course/course.utils.js";
 // Active teachers with at least one catalog course, most popular first: most
 // students, then the best average rating, then the most reviews.
 // q matches the name, the headline or the subject of one of their courses.
-const listTeachers = async (q?: string): Promise<TeacherPublic[]> => {
+// featured=true: only the teachers an admin picked for the home page.
+const listTeachers = async (
+	q?: string,
+	featured?: boolean,
+): Promise<TeacherPublic[]> => {
 	const rows = await prisma.teacherProfile.findMany({
-		where: { user: { status: "active" }, courses: { some: catalogWhere } },
+		where: {
+			user: { status: "active" },
+			courses: { some: catalogWhere },
+			...(featured === undefined ? {} : { featured }),
+		},
 		include: teacherPublicInclude,
 	});
 	const needle = q?.toLowerCase();

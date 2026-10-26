@@ -83,6 +83,7 @@ const listCourses = async (query: ListQuery) => {
 			chapterCount: c.chapters.length,
 			lessonCount: lessons.length,
 			durationMin: lessons.reduce((s, l) => s + l.durationMin, 0),
+			featured: c.featured,
 			createdAt: c.createdAt.toISOString(),
 			updatedAt: c.updatedAt.toISOString(),
 		};

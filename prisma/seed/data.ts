@@ -125,6 +125,7 @@ export function buildSeedData(now = Date.now()) {
 			id: "t1",
 			userId: "u-t1",
 			teacherCode: "RO-T-26-0101",
+			featured: true,
 			headline: "Physics & Mathematics educator",
 			bio: "Teaching physics for over a decade with a focus on building intuition before formulas. Former board examiner for SSC and HSC physics.",
 			qualifications: [
@@ -140,6 +141,7 @@ export function buildSeedData(now = Date.now()) {
 			id: "t2",
 			userId: "u-t2",
 			teacherCode: "RO-T-26-0102",
+			featured: true,
 			headline: "Chemistry made simple",
 			bio: "Associate professor who loves turning reaction mechanisms into stories students remember.",
 			qualifications: ["MSc in Chemistry", "BSc (Hons) in Chemistry"],
@@ -151,6 +153,7 @@ export function buildSeedData(now = Date.now()) {
 			id: "t3",
 			userId: "u-t3",
 			teacherCode: "RO-T-26-0103",
+			featured: true,
 			headline: "Mathematics & programming mentor",
 			bio: "Senior lecturer in engineering mathematics who also teaches beginners to write their first programs.",
 			qualifications: ["MSc in Mathematics", "BSc in Computer Science"],

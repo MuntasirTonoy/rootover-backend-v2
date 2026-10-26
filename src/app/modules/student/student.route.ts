@@ -5,14 +5,15 @@ import { ReportController as Reports } from "../report/report.controller.js";
 import { StudentController } from "./student.controller.js";
 import { StudentValidation } from "./student.validation.js";
 
-// Mounted at /api/me next to the profile routes; students only
-// (teachers and admins have no My Classes / Saved Videos)
+// Mounted at /api/me next to the profile routes; students only, except the
+// enrollments list, which teachers also use for courses they bought before
+// (admins have no My Classes / Saved Videos)
 const router = Router();
 const student = auth("student");
 
 router.get(
 	"/enrollments",
-	student,
+	auth("student", "teacher"),
 	validateRequest(StudentValidation.enrollments),
 	StudentController.listEnrollments,
 );

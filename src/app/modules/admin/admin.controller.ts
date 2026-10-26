@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { currentUser } from "../../middlewares/auth.js";
 import { AdminCourseService as Courses } from "./admin.courses.js";
+import { AdminFeaturedService as Featured } from "./admin.featured.js";
 import { AdminService } from "./admin.service.js";
 
 // validateRequest has already replaced req.params / req.query with parsed values
@@ -42,6 +43,26 @@ const listTeachers = async (req: Request, res: Response) => {
 
 const listStudents = async (req: Request, res: Response) => {
 	res.json(await AdminService.listStudents(query(req)));
+};
+
+const setCourseFeatured = async (req: Request, res: Response) => {
+	res.json(
+		await Featured.setCourseFeatured(
+			currentUser(req),
+			id(req),
+			req.body.featured,
+		),
+	);
+};
+
+const setTeacherFeatured = async (req: Request, res: Response) => {
+	res.json(
+		await Featured.setTeacherFeatured(
+			currentUser(req),
+			id(req),
+			req.body.featured,
+		),
+	);
 };
 
 const setUserStatus = async (req: Request, res: Response) => {
@@ -116,6 +137,8 @@ export const AdminController = {
 	listTeachers,
 	listStudents,
 	setUserStatus,
+	setCourseFeatured,
+	setTeacherFeatured,
 	listAdmins,
 	setUserRole,
 	listRegistrationFees,

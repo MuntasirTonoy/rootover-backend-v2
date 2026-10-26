@@ -17,13 +17,13 @@ router.get(
 );
 router.post(
 	"/:courseId/lessons/:lessonId/watch",
-	auth("student"),
+	auth("student", "teacher"),
 	validateRequest(LearnValidation.lesson),
 	LearnController.recordWatch,
 );
 router.put(
 	"/:courseId/lessons/:lessonId/complete",
-	auth("student"),
+	auth("student", "teacher"),
 	validateRequest(LearnValidation.complete),
 	LearnController.setComplete,
 );
