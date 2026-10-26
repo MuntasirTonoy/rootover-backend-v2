@@ -28,4 +28,19 @@ const setComplete = async (req: Request, res: Response) => {
 	);
 };
 
-export const LearnController = { getPlayer, recordWatch, setComplete };
+const saveReview = async (req: Request, res: Response) => {
+	res.json(
+		await LearnService.saveReview(
+			currentUser(req),
+			String(req.params.courseId),
+			req.body,
+		),
+	);
+};
+
+export const LearnController = {
+	getPlayer,
+	recordWatch,
+	setComplete,
+	saveReview,
+};

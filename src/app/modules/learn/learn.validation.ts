@@ -11,4 +11,23 @@ const complete = z.object({
 	body: z.object({ done: z.boolean({ error: "done must be true or false." }) }),
 });
 
-export const LearnValidation = { player, lesson, complete };
+const RATING_MESSAGE = "Choose a rating from 1 to 5 stars.";
+
+const review = z.object({
+	params: z.object({ courseId: id }),
+	body: z.object({
+		rating: z
+			.number({ error: RATING_MESSAGE })
+			.int(RATING_MESSAGE)
+			.min(1, RATING_MESSAGE)
+			.max(5, RATING_MESSAGE),
+		comment: z
+			.string()
+			.trim()
+			.max(1000, "Keep the review under 1000 characters.")
+			.optional()
+			.default(""),
+	}),
+});
+
+export const LearnValidation = { player, lesson, complete, review };

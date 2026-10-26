@@ -28,6 +28,14 @@ router.put(
 	LearnController.setComplete,
 );
 
+// Create or update the student's own rating of a course they bought
+router.put(
+	"/:courseId/review",
+	auth("student"),
+	validateRequest(LearnValidation.review),
+	LearnController.saveReview,
+);
+
 // Any signed-in user reaches the service, which answers teachers and admins
 // with the spec's own 403 message
 router.post(

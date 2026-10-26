@@ -4,9 +4,14 @@ import httpStatus from "http-status";
 import type { User } from "../../../generated/prisma/client.js";
 import AppError from "../../errors/AppError.js";
 import prisma from "../../lib/prisma.js";
-import type { CourseDetail, Progress } from "../course/course.interface.js";
+import { logActivity } from "../../utils/activity.js";
+import type {
+	CourseDetail,
+	Progress,
+	ReviewResponse,
+} from "../course/course.interface.js";
 import { CourseService } from "../course/course.service.js";
-import { progressOf } from "../course/course.utils.js";
+import { progressOf, toReviewResponse } from "../course/course.utils.js";
 
 export interface PlayerData {
 	course: CourseDetail;
@@ -108,4 +113,46 @@ const setComplete = async (
 	};
 };
 
-export const LearnService = { getPlayer, recordWatch, setComplete };
+// One review per student per course (rating 1-5, optional comment); sending it
+// again updates it. Only students who own the course may rate it.
+const saveReview = async (
+	user: User,
+	courseId: string,
+	input: { rating: number; comment: string },
+): Promise<ReviewResponse> => {
+	const enrollment = await enrollmentOf(user.id, courseId);
+	if (!enrollment)
+		throw new AppError(
+			httpStatus.FORBIDDEN,
+			"Only students who bought this course can rate it.",
+		);
+	const review = await prisma.$transaction(async (tx) => {
+		const saved = await tx.review.upsert({
+			where: { courseId_studentId: { courseId, studentId: user.id } },
+			create: {
+				courseId,
+				studentId: user.id,
+				studentName: user.name,
+				rating: input.rating,
+				comment: input.comment,
+			},
+			update: {
+				studentName: user.name,
+				rating: input.rating,
+				comment: input.comment,
+				date: new Date(),
+			},
+			include: { course: { select: { title: true } } },
+		});
+		await logActivity(
+			tx,
+			user,
+			`Rated a course ${saved.rating}/5`,
+			saved.course.title,
+		);
+		return saved;
+	});
+	return toReviewResponse(review);
+};
+
+export const LearnService = { getPlayer, recordWatch, setComplete, saveReview };

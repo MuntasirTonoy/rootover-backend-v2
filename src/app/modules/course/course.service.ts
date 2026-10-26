@@ -186,6 +186,10 @@ const getCourse = async (
 		published,
 		chapters: toChaptersPublic(row.chapters, access),
 		reviews: row.reviews.map(toReviewResponse),
+		myReview: (() => {
+			const mine = user && row.reviews.find((r) => r.studentId === user.id);
+			return mine ? toReviewResponse(mine) : undefined;
+		})(),
 		teacher: toTeacherPublic(row.teacher),
 		access,
 		enrollment: enrollment

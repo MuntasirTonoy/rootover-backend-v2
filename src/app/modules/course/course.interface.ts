@@ -92,6 +92,8 @@ export interface CourseDetail extends Omit<CourseSummary, "teacher"> {
 	published: boolean;
 	chapters: ChapterPublic[];
 	reviews: ReviewResponse[];
+	// The signed-in student's own review (not in the spec), to pre-fill the form
+	myReview?: ReviewResponse;
 	teacher: TeacherPublic;
 	access: CourseAccess;
 	// completedLessonIds (not in the spec) drives the player's checkmarks
