@@ -95,18 +95,19 @@ const envSchema = z
 						message: `${key} is required for bKash payments`,
 					});
 		if (env.NODE_ENV === "production") {
+			// URLs aren't secrets, so the value is shown; unset ones fell back to localhost
 			for (const key of ["FRONTEND_URL", "API_PUBLIC_URL"] as const)
 				if (!env[key].startsWith("https://"))
 					ctx.addIssue({
 						code: "custom",
 						path: [key],
-						message: `${key} must be an https URL in production`,
+						message: `${key} must be an https URL in production (${process.env[key] ? `got ${env[key]}` : "not set"})`,
 					});
 			if (env.DEMO_MODE)
 				ctx.addIssue({
 					code: "custom",
 					path: ["DEMO_MODE"],
-					message: "DEMO_MODE must be off in production",
+					message: "DEMO_MODE must be off in production (set DEMO_MODE=false)",
 				});
 		}
 		if (env.NODE_ENV === "production" && env.STORAGE_DRIVER === "memory")

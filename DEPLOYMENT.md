@@ -45,6 +45,46 @@ simulated, or storage is the test-only memory driver. It warns when bKash is
 still the sandbox. Generate the JWT secret with
 `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`.
 
+**Don't paste the local `.env` into the host.** Its development values
+(`http://localhost:...` URLs, `DEMO_MODE=true`, the dev database and JWT secret)
+stop the server with:
+
+```
+Invalid environment variables:
+  - FRONTEND_URL: FRONTEND_URL must be an https URL in production (got http://localhost:3000)
+  - API_PUBLIC_URL: API_PUBLIC_URL must be an https URL in production (not set)
+  - DEMO_MODE: DEMO_MODE must be off in production (set DEMO_MODE=false)
+```
+
+"not set" means the variable is missing and fell back to its localhost default.
+`FRONTEND_URL` must match the address in the browser bar exactly (no trailing
+`/`, `www` or not), because it is the only origin CORS allows.
+
+### Payment variables
+
+| Variable | Testing a deployment (sandbox) | Live |
+|---|---|---|
+| `API_PUBLIC_URL` | `https://api.rootover.site` (or the `onrender.com` URL) | same |
+| `PAYMENT_PROVIDER` | leave unset (`bkash` because the credentials are set) | leave unset |
+| `BKASH_BASE_URL` | `https://tokenized.sandbox.bka.sh/v1.2.0-beta` | `https://tokenized.pay.bka.sh/v1.2.0-beta` |
+| `BKASH_USERNAME` / `BKASH_PASSWORD` / `BKASH_APP_KEY` / `BKASH_APP_SECRET` | sandbox credentials | **live merchant** credentials |
+
+Sandbox credentials don't work on the live URL and the other way round: switch
+the URL and all four credentials together. Sandbox in production starts with the
+warning `bKash SANDBOX in production; no real money will be collected`; after
+switching, `GET /api/config` shows `payment.sandbox: false`.
+
+### Render
+
+- Node: `package.json` `engines` requires Node `>=22.12` (Prisma 7, TypeScript 7);
+  Render picks a matching version.
+- Build command: `npm ci --include=dev && npm run build && npm run db:deploy`.
+  `--include=dev` is required: with `NODE_ENV=production` npm skips the dev
+  dependencies, and the build needs `prisma` and `typescript`. `db:deploy` in the
+  build applies migrations (the free plan has no pre-deploy command).
+- Start command: `npm start`. Health check path: `/api/health`. Render sets `PORT`.
+- `TRUST_PROXY=1`.
+
 ## 3. API build and release
 
 ```
