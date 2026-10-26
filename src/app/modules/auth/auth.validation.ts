@@ -61,7 +61,18 @@ const resetPassword = z.object({
 	}),
 });
 
+// The ID token (a JWT) that Google Identity Services hands the browser
+const google = z.object({
+	body: z.object({
+		credential: z
+			.string({ error: "Google sign-in failed. Please try again." })
+			.min(20, "Google sign-in failed. Please try again.")
+			.max(4096, "Google sign-in failed. Please try again."),
+	}),
+});
+
 export const AuthValidation = {
+	google,
 	register,
 	login,
 	verifyEmail,

@@ -44,6 +44,8 @@ router.get("/config", (req: Request, res: Response) => {
 		minWithdrawal: MIN_WITHDRAWAL,
 		avatarPresets: AVATAR_PRESETS,
 		demo: config.demo_mode,
+		// null = "Continue with Google" is off
+		googleClientId: config.google_client_id ?? null,
 		payment: {
 			provider: paymentProvider.name,
 			sandbox: paymentProvider.name === "bkash" && config.payment.bkash.sandbox,

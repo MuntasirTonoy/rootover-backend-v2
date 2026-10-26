@@ -31,6 +31,11 @@ const verifyEmail = async (req: Request, res: Response) => {
 	res.json(await AuthService.verifyEmail(req.body));
 };
 
+// "Continue with Google"; responds like login ({ token, user })
+const google = async (req: Request, res: Response) => {
+	res.json(await AuthService.googleLogin(req.body));
+};
+
 const resendVerification = async (req: Request, res: Response) => {
 	res.json(await AuthService.resendVerification(req.body));
 };
@@ -46,6 +51,7 @@ const resetPassword = async (req: Request, res: Response) => {
 export const AuthController = {
 	register,
 	login,
+	google,
 	logout,
 	getMe,
 	verifyEmail,

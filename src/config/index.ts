@@ -59,6 +59,18 @@ const envSchema = z
 		// Outgoing email (sign-up codes, password reset) through Resend. Optional
 		// outside production: without it, emails are printed to the server console.
 		RESEND_API_KEY: z.string().optional(),
+		// "Continue with Google": the OAuth client ID (Web application) from
+		// Google Cloud Console. Not a secret: GET /api/config hands it to the
+		// frontend. Unset = Google sign-in is off.
+		GOOGLE_CLIENT_ID: z
+			.string()
+			.trim()
+			.regex(
+				/^[\w-]+\.apps\.googleusercontent\.com$/,
+				"GOOGLE_CLIENT_ID must end with .apps.googleusercontent.com",
+			)
+			.optional()
+			.or(z.literal("").transform(() => undefined)),
 		// Must use a domain verified in Resend (onboarding@resend.dev works for
 		// testing, but only delivers to the Resend account's own address)
 		EMAIL_FROM: z
@@ -186,4 +198,5 @@ export default {
 		resend_api_key: env.RESEND_API_KEY || undefined,
 		from: env.EMAIL_FROM,
 	},
+	google_client_id: env.GOOGLE_CLIENT_ID,
 };

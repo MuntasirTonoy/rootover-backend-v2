@@ -16,6 +16,8 @@ export default defineConfig({
 			STORAGE_DRIVER: "memory",
 			RESEND_API_KEY: "",
 			DEMO_MODE: "true",
+			// Google sign-in on; tests mock google-auth-library, never calling Google
+			GOOGLE_CLIENT_ID: "test-client.apps.googleusercontent.com",
 		},
 		projects: [
 			{

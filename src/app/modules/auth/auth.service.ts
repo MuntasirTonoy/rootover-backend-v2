@@ -1,5 +1,8 @@
+import { randomBytes } from "node:crypto";
+import { OAuth2Client, type TokenPayload } from "google-auth-library";
 import httpStatus from "http-status";
 import type { z } from "zod";
+import config from "../../../config/index.js";
 import type { OtpPurpose, User } from "../../../generated/prisma/client.js";
 import AppError from "../../errors/AppError.js";
 import { isPrismaKnownError } from "../../errors/handlePrismaError.js";
@@ -139,10 +142,17 @@ const verifyEmail = async (input: Body<"verifyEmail">) => {
 		);
 
 	await consumeOtp(user.id, "verify_email", input.code);
+	const verified = await markVerified(user);
+	if (verified.status === "banned")
+		throw new AppError(httpStatus.FORBIDDEN, BANNED_MESSAGE);
+	return session(verified);
+};
+
+// Marks the email verified (by code or by Google). The first account of a new
+// deployment becomes its admin: nobody else is verified (or an admin) yet. The
+// lock makes two first sign-ups take turns, so only one of them can win.
+const markVerified = async (user: User) => {
 	const verified = await prisma.$transaction(async (tx) => {
-		// The first account of a new deployment becomes its admin: nobody else is
-		// verified (or an admin) yet. The lock makes two first sign-ups take turns,
-		// so only one of them can win.
 		await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('first-admin'))`;
 		const others = await tx.user.count({
 			where: {
@@ -160,9 +170,88 @@ const verifyEmail = async (input: Body<"verifyEmail">) => {
 	});
 	if (verified.role === "admin" && user.role !== "admin")
 		console.log(`[auth] ${verified.email} is the first account: made admin`);
-	if (verified.status === "banned")
+	return verified;
+};
+
+const googleClient = new OAuth2Client();
+const GOOGLE_FAILED = "Google sign-in failed. Please try again.";
+
+// Checks the ID token from Google Identity Services: Google's signature, expiry
+// and that it was issued for our client ID. Only Google-verified emails count.
+const verifyGoogleToken = async (credential: string) => {
+	if (!config.google_client_id)
+		throw new AppError(httpStatus.NOT_FOUND, "Google sign-in is not enabled.");
+	let payload: TokenPayload | undefined;
+	try {
+		const ticket = await googleClient.verifyIdToken({
+			idToken: credential,
+			audience: config.google_client_id,
+		});
+		payload = ticket.getPayload();
+	} catch {
+		throw new AppError(httpStatus.UNAUTHORIZED, GOOGLE_FAILED);
+	}
+	if (!payload?.email || !payload.email_verified)
+		throw new AppError(
+			httpStatus.UNAUTHORIZED,
+			"Your Google account's email address isn't verified.",
+		);
+	const name = (payload.name ?? "").trim().slice(0, 80);
+	return {
+		email: normaliseEmail(payload.email),
+		name: name.length >= 2 ? name : payload.email.split("@")[0],
+	};
+};
+
+// A password nobody knows, for accounts created through Google. They can set a
+// real one later with "Forgot password".
+const unusablePasswordHash = () =>
+	hashPassword(randomBytes(32).toString("hex"));
+
+// POST /api/auth/google: signs in with Google, creating the account on first
+// use. Google has verified the email, so no code is needed.
+const googleLogin = async (input: Body<"google">) => {
+	const profile = await verifyGoogleToken(input.credential);
+	let user = await prisma.user.findUnique({ where: { email: profile.email } });
+
+	if (!user) {
+		try {
+			const passwordHash = await unusablePasswordHash();
+			user = await prisma.$transaction(async (tx) => {
+				const created = await tx.user.create({
+					data: { name: profile.name, email: profile.email, passwordHash },
+				});
+				await logActivity(
+					tx,
+					created,
+					"Registered a new account (Google)",
+					profile.email,
+				);
+				return created;
+			});
+		} catch (err) {
+			// A second sign-in with the same email raced past the lookup above
+			if (!(isPrismaKnownError(err) && err.code === "P2002")) throw err;
+			user = await prisma.user.findUniqueOrThrow({
+				where: { email: profile.email },
+			});
+		}
+	} else if (!user.emailVerifiedAt) {
+		// An unfinished email sign-up: whoever chose its password never proved
+		// they own the address, so that password is dropped
+		user = await prisma.user.update({
+			where: { id: user.id },
+			data: {
+				passwordHash: await unusablePasswordHash(),
+				tokenVersion: { increment: 1 },
+			},
+		});
+	}
+
+	if (!user.emailVerifiedAt) user = await markVerified(user);
+	if (user.status === "banned")
 		throw new AppError(httpStatus.FORBIDDEN, BANNED_MESSAGE);
-	return session(verified);
+	return session(user);
 };
 
 // Runs after the response is sent. Looking the account up and emailing it in
@@ -266,6 +355,7 @@ export const AuthService = {
 	resendVerification,
 	forgotPassword,
 	resetPassword,
+	googleLogin,
 	verifyCredentials,
 	session,
 	getMe,

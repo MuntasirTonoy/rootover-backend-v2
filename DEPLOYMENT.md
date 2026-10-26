@@ -60,6 +60,14 @@ Invalid environment variables:
 `FRONTEND_URL` must match the address in the browser bar exactly (no trailing
 `/`, `www` or not), because it is the only origin CORS allows.
 
+### Google sign-in
+
+`GOOGLE_CLIENT_ID=<id>.apps.googleusercontent.com` turns on "Continue with
+Google" (leave it unset to hide the button). In Google Cloud Console the OAuth
+client (Web application) must list the site under **Authorized JavaScript
+origins** (`https://rootover.site`, plus `https://www.rootover.site` if used).
+No redirect URI or client secret is needed.
+
 ### Payment variables
 
 | Variable | Testing a deployment (sandbox) | Live |
