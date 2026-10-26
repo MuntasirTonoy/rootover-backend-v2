@@ -14,7 +14,13 @@ describe("detectMime", () => {
 			detectMime(bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)),
 		).toBe("image/png");
 		expect(
-			detectMime(Buffer.concat([Buffer.from("RIFF"), bytes(1, 2, 3, 4), Buffer.from("WEBP")])),
+			detectMime(
+				Buffer.concat([
+					Buffer.from("RIFF"),
+					bytes(1, 2, 3, 4),
+					Buffer.from("WEBP"),
+				]),
+			),
 		).toBe("image/webp");
 		expect(detectMime(Buffer.from("%PDF-1.7"))).toBe("application/pdf");
 	});

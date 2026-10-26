@@ -8,6 +8,7 @@ import prisma from "../../lib/prisma.js";
 import { checkCoupon, quote } from "../../utils/pricing.js";
 import { catalogWhere } from "../course/course.queries.js";
 import { PaymentService } from "../payment/payment.service.js";
+import { SettingsService } from "../settings/settings.service.js";
 import type { CheckoutValidation } from "./checkout.validation.js";
 
 type QuoteInput = z.infer<typeof CheckoutValidation.quote>["body"];
@@ -81,7 +82,7 @@ const getQuote = async (user: User, input: QuoteInput) => {
 		? await resolveCoupon(course, input.couponCode)
 		: null;
 	return {
-		quote: quote(course, coupon),
+		quote: quote(course, coupon, (await SettingsService.get()).commissionRate),
 		coupon: coupon ? toCouponPublic(coupon) : null,
 	};
 };
@@ -117,7 +118,7 @@ const checkout = async (user: User, input: CheckoutInput) => {
 	return PaymentService.startCoursePayment(user, {
 		course,
 		coupon,
-		quote: quote(course, coupon),
+		quote: quote(course, coupon, (await SettingsService.get()).commissionRate),
 	});
 };
 

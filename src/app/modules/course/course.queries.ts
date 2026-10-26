@@ -14,7 +14,6 @@ export const courseSummaryInclude = {
 		select: { id: true, user: { select: { name: true, avatar: true } } },
 	},
 	chapters: { select: { lessons: { select: { durationMin: true } } } },
-	reviews: { select: { rating: true } },
 	_count: { select: { enrollments: true } },
 } satisfies Prisma.CourseInclude;
 
@@ -31,7 +30,6 @@ export const courseDetailInclude = {
 		...ordered,
 		include: { lessons: ordered },
 	},
-	reviews: { orderBy: { date: "desc" } },
 } satisfies Prisma.CourseInclude;
 
 export type CourseDetailRow = Prisma.CourseGetPayload<{
@@ -45,7 +43,8 @@ export const teacherPublicInclude = {
 		where: catalogWhere,
 		select: {
 			subject: true,
-			reviews: { select: { rating: true } },
+			ratingSum: true,
+			ratingCount: true,
 			enrollments: { select: { studentId: true } },
 		},
 	},
@@ -61,7 +60,6 @@ export const courseFullInclude = {
 		...ordered,
 		include: { lessons: ordered },
 	},
-	reviews: { orderBy: { date: "desc" } },
 } satisfies Prisma.CourseInclude;
 
 export type CourseFullRow = Prisma.CourseGetPayload<{

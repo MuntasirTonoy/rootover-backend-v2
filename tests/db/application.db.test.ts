@@ -76,7 +76,12 @@ beforeAll(async () => {
 afterAll(async () => {
 	await prisma.activityLog.deleteMany({
 		where: {
-			OR: [{ actorId: { in: testUsers } }, { target: { in: testNames } }],
+			OR: [
+				{ actorId: { in: testUsers } },
+				{ target: { in: testNames } },
+				// Automatic approvals log "<name> · <Teacher ID>"
+				...testNames.map((n) => ({ target: { startsWith: `${n} · ` } })),
+			],
 		},
 	});
 	await prisma.payment.deleteMany({ where: { userId: { in: testUsers } } });
@@ -239,6 +244,7 @@ describe("the full workflow (spec test 10)", () => {
 			(await prisma.teacherApplication.findUniqueOrThrow({ where: { id } }))
 				.status,
 		).toBe("payment_required");
+		const teachersBefore = await prisma.teacherProfile.count();
 		await followPayment(app.base, r.body.redirectURL);
 		const payment = (
 			await call(`/payments/${r.body.paymentId}`, { token: s.token })
@@ -257,8 +263,6 @@ describe("the full workflow (spec test 10)", () => {
 			payerNumber: "01000000000",
 		});
 		expect(payment.registrationFee.trxId).toMatch(/^DEMO[A-Z0-9]+$/);
-		mine = await call("/me/teacher-application", { token: s.token });
-		expect(mine.body.application.status).toBe("under_verification");
 		expect(
 			await prisma.activityLog.count({
 				where: {
@@ -267,31 +271,14 @@ describe("the full workflow (spec test 10)", () => {
 				},
 			}),
 		).toBe(1);
-		expect(
-			(
-				await call(`/teacher-applications/${id}/pay-fee`, {
-					method: "POST",
-					token: s.token,
-				})
-			).status,
-		).toBe(422);
 
-		const teachersBefore = await prisma.teacherProfile.count();
-		// Two approvals at once: only one succeeds
-		const approvals = await Promise.all(
-			[0, 1].map(() =>
-				call(`/admin/teacher-applications/${id}/approve`, {
-					method: "POST",
-					token: tokens["u-admin"],
-				}),
-			),
-		);
-		expect(approvals.map((a) => a.status).sort()).toEqual([200, 422]);
-		const approved = approvals.find((a) => a.status === 200)?.body;
-		expect(approved.application).toMatchObject({
+		// The paid fee approves the application automatically
+		mine = await call("/me/teacher-application", { token: s.token });
+		expect(mine.body.application).toMatchObject({
 			status: "approved",
-			teacherId: approved.teacher.id,
+			teacherId: mine.body.teacher.id,
 		});
+		const approved = { teacher: mine.body.teacher };
 		expect(approved.teacher.teacherCode).toBe(
 			`RO-T-26-${String(101 + teachersBefore).padStart(4, "0")}`,
 		);
@@ -300,6 +287,32 @@ describe("the full workflow (spec test 10)", () => {
 			headline: "New teacher on Root Over",
 			experienceYears: 0,
 		});
+		expect(
+			await prisma.activityLog.count({
+				where: {
+					actorId: null,
+					action: "Approved teacher application (registration fee paid)",
+					target: { startsWith: s.name },
+				},
+			}),
+		).toBe(1);
+		// Nothing left to pay or approve
+		expect(
+			(
+				await call(`/teacher-applications/${id}/pay-fee`, {
+					method: "POST",
+					token: s.token,
+				})
+			).status,
+		).toBe(422);
+		expect(
+			(
+				await call(`/admin/teacher-applications/${id}/approve`, {
+					method: "POST",
+					token: tokens["u-admin"],
+				})
+			).status,
+		).toBe(422);
 
 		const user = await prisma.user.findUniqueOrThrow({ where: { id: s.id } });
 		expect(user.role).toBe("teacher");
@@ -342,7 +355,6 @@ describe("the full workflow (spec test 10)", () => {
 				"Submitted a teacher application",
 				"Requested registration fee",
 				"Paid the teacher registration fee (simulated payment)",
-				"Approved teacher application",
 			]),
 		);
 	});

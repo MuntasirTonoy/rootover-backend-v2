@@ -7,7 +7,10 @@ import {
 	teacherFinance,
 	type WithdrawalRow,
 } from "../../src/app/utils/finance.js";
-import { splitSale } from "../../src/app/utils/pricing.js";
+import {
+	DEFAULT_COMMISSION_RATE,
+	splitSale,
+} from "../../src/app/utils/pricing.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 9, 25, 6, 0); // 2026-10-25 12:00 in Dhaka
@@ -21,7 +24,7 @@ const sale = (
 	status,
 	listPrice,
 	amountPaid,
-	...splitSale(amountPaid),
+	...splitSale(amountPaid, DEFAULT_COMMISSION_RATE),
 	createdAt: new Date(NOW - daysAgo * DAY),
 });
 

@@ -76,7 +76,8 @@ describe("spec test 11: course workflow", () => {
 			level: "SSC",
 			subject: "Physics",
 			title,
-			description: "Everything a complete course needs, for the acceptance test.",
+			description:
+				"Everything a complete course needs, for the acceptance test.",
 			outcomes: ["Pass the acceptance test"],
 			price: 900,
 			chapters: [

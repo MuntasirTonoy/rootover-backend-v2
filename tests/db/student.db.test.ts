@@ -2,13 +2,7 @@
 // 10.4; spec test 9). Purchases are made by throwaway students created here,
 // and every coupon count touched is restored, so the seed stays unchanged.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-	api,
-	followPayment,
-	prisma,
-	startApp,
-	tokenFor,
-} from "./helpers.js";
+import { api, followPayment, prisma, startApp, tokenFor } from "./helpers.js";
 
 let app: ReturnType<typeof startApp>;
 let call: ReturnType<typeof api>;

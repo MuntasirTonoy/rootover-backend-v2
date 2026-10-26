@@ -97,6 +97,8 @@ enum ReportStatus {
 enum OtpPurpose {
   verify_email
   reset_password
+  // An admin confirming a change to the platform settings (fees)
+  admin_settings
 }
 
 enum ReportEventType {
@@ -133,7 +135,6 @@ model User {
   purchases        Purchase[]
   enrollments      Enrollment[]
   savedLessons     SavedLesson[]
-  reviews          Review[]
   videoReports     VideoReport[]        @relation("ReportReporter")
   reportEvents     VideoReportEvent[]
   activityLogs     ActivityLog[]
@@ -221,11 +222,14 @@ model Course {
   status        CourseStatus   @default(draft)
   statusNote    String?
   featured      Boolean        @default(false)
+  // Star ratings from buyers (1-5 each), kept only as a running total and a
+  // count: who rated is recorded on their Enrollment (ratedAt), nothing else
+  ratingSum     Int            @default(0)
+  ratingCount   Int            @default(0)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
   chapters     Chapter[]
-  reviews      Review[]
   coupons      Coupon[]
   purchases    Purchase[]
   enrollments  Enrollment[]
@@ -267,20 +271,6 @@ model Lesson {
   reports     VideoReport[]
 
   @@index([chapterId, position])
-}
-
-model Review {
-  id          String   @id @default(cuid())
-  courseId    String
-  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  studentId   String?
-  student     User?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  studentName String
-  rating      Int
-  comment     String
-  date        DateTime @default(now())
-
-  @@unique([courseId, studentId])
 }
 
 model Coupon {
@@ -344,6 +334,8 @@ model Enrollment {
   // Plain id (no FK) so deleting a lesson never breaks the enrollment
   lastLessonId  String?
   lastWatchedAt DateTime?
+  // Set once the student rates the course; a course can be rated only once
+  ratedAt       DateTime?
 
   completions LessonCompletion[]
 
@@ -446,7 +438,18 @@ model VideoReportEvent {
   @@index([reportId, at])
 }
 
-// One-time email codes (sign-up verification, password reset). Only an HMAC of
+// Admin-editable platform fees: a single row (id "default"), created with the
+// defaults from utils/pricing.ts the first time it's read. Purchases copy the
+// commission at sale time, so a change only affects new sales.
+model PlatformSettings {
+  id              String   @id @default("default")
+  commissionRate  Float
+  registrationFee Int
+  updatedAt       DateTime @updatedAt
+  updatedById     String?
+}
+
+// One-time email codes (sign-up verification, password reset, admin settings). Only an HMAC of
 // the code is stored. Issuing a new code consumes the previous ones.
 model EmailOtp {
   id         String     @id @default(cuid())

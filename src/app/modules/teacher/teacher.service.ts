@@ -93,7 +93,8 @@ const getDashboard = async (user: User): Promise<TeacherDashboard> => {
 					id: true,
 					title: true,
 					status: true,
-					reviews: { select: { rating: true } },
+					ratingSum: true,
+					ratingCount: true,
 					_count: { select: { enrollments: true } },
 				},
 				orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
@@ -152,7 +153,7 @@ const getDashboard = async (user: User): Promise<TeacherDashboard> => {
 					students: c._count.enrollments,
 					gross: totals.gross,
 					net: totals.teacherNet,
-					rating: ratingOf(c.reviews),
+					rating: ratingOf(c),
 				};
 			}),
 		recentEnrollments: recent.map((p) => ({

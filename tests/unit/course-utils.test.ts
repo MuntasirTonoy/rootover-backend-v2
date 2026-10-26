@@ -20,13 +20,16 @@ const lesson = (id: string, isPreview = false): Lesson => ({
 });
 
 describe("ratingOf", () => {
-	it("averages to one decimal, 0 with no reviews", () => {
-		expect(ratingOf([])).toEqual({ average: 0, count: 0 });
-		expect(ratingOf([{ rating: 5 }, { rating: 4 }, { rating: 4 }])).toEqual({
+	it("averages the running total to one decimal, 0 with no ratings", () => {
+		expect(ratingOf({ ratingSum: 0, ratingCount: 0 })).toEqual({
+			average: 0,
+			count: 0,
+		});
+		expect(ratingOf({ ratingSum: 13, ratingCount: 3 })).toEqual({
 			average: 4.3,
 			count: 3,
 		});
-		expect(ratingOf([{ rating: 5 }, { rating: 4 }])).toEqual({
+		expect(ratingOf({ ratingSum: 9, ratingCount: 2 })).toEqual({
 			average: 4.5,
 			count: 2,
 		});

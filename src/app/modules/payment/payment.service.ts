@@ -26,12 +26,18 @@ import {
 } from "../../lib/payment.js";
 import prisma from "../../lib/prisma.js";
 import { logActivity } from "../../utils/activity.js";
-import { REGISTRATION_FEE, type Quote } from "../../utils/pricing.js";
+import type { Quote } from "../../utils/pricing.js";
+import {
+	createTeacher,
+	isTeacherCodeClash,
+	photoAsAvatar,
+} from "../application/application.approval.js";
 import { toRegistrationFeeResponse } from "../application/application.utils.js";
 import {
 	toEnrollmentResponse,
 	toPurchaseResponse,
 } from "../purchase/purchase.utils.js";
+import { SettingsService } from "../settings/settings.service.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -172,7 +178,8 @@ const startFeePayment = async (user: User, applicationId: string) => {
 			provider: paymentProvider.name,
 			userId: user.id,
 			applicationId,
-			amount: REGISTRATION_FEE,
+			// The fee in force now; a later change never alters a started payment
+			amount: (await SettingsService.get()).registrationFee,
 		},
 	});
 	return openPayment(payment, user);
@@ -243,13 +250,15 @@ const fulfil = async (
 		return { purchaseId: purchase.id };
 	}
 
+	// A paid fee approves the application straight away (user's request,
+	// 2026-10-26): no separate admin verification step any more
 	const application = await tx.teacherApplication.updateMany({
 		where: {
 			id: payment.applicationId ?? "",
 			userId: user.id,
 			status: "payment_required",
 		},
-		data: { status: "under_verification" },
+		data: { status: "approved" },
 	});
 	if (application.count === 0)
 		throw new AppError(
@@ -272,7 +281,45 @@ const fulfil = async (
 		`Paid the teacher registration fee (${paymentProvider.label})`,
 		`৳${payment.amount} via bKash`,
 	);
+	const { application: approved, teacher } = await createTeacher(
+		tx,
+		await tx.teacherApplication.findUniqueOrThrow({
+			where: { id: payment.applicationId ?? "" },
+		}),
+	);
+	await logActivity(
+		tx,
+		null,
+		"Approved teacher application (registration fee paid)",
+		`${approved.fullName} · ${teacher.teacherCode}`,
+	);
 	return { registrationFeeId: fee.id };
+};
+
+// Writes what was paid for and completes the payment, in one transaction.
+// Retried when an automatic teacher approval loses a Teacher ID race.
+const complete = async (
+	payment: Payment,
+	outcome: PaymentOutcome & { status: "completed" },
+) => {
+	for (let attempt = 1; ; attempt++) {
+		try {
+			return await prisma.$transaction(async (tx) => {
+				const links = await fulfil(tx, payment, outcome);
+				await tx.payment.update({
+					where: { id: payment.id },
+					data: {
+						state: "completed",
+						trxId: outcome.trxId,
+						payerNumber: outcome.payerNumber,
+						...links,
+					},
+				});
+			});
+		} catch (err) {
+			if (!isTeacherCodeClash(err) || attempt >= 3) throw err;
+		}
+	}
 };
 
 const settle = async (payment: Payment, outcome: PaymentOutcome) => {
@@ -287,23 +334,14 @@ const settle = async (payment: Payment, outcome: PaymentOutcome) => {
 		return;
 	}
 	try {
-		await prisma.$transaction(async (tx) => {
-			const links = await fulfil(tx, payment, outcome);
-			await tx.payment.update({
-				where: { id: payment.id },
-				data: {
-					state: "completed",
-					trxId: outcome.trxId,
-					payerNumber: outcome.payerNumber,
-					...links,
-				},
-			});
-		});
+		await complete(payment, outcome);
 	} catch (err) {
 		const reason =
 			err instanceof AppError
 				? err.message
-				: isPrismaKnownError(err) && err.code === "P2002"
+				: isPrismaKnownError(err) &&
+						err.code === "P2002" &&
+						payment.purpose === "course_purchase"
 					? "You already own this course. Contact support for a refund."
 					: "We couldn't record this payment. Contact support with the transaction id.";
 		console.error(
@@ -319,6 +357,15 @@ const settle = async (payment: Payment, outcome: PaymentOutcome) => {
 				payerNumber: outcome.payerNumber,
 			},
 		});
+		return;
+	}
+	// The new teacher's application photo becomes their avatar (best-effort)
+	if (payment.purpose === "registration_fee" && payment.applicationId) {
+		const application = await prisma.teacherApplication.findUnique({
+			where: { id: payment.applicationId },
+			select: { userId: true, photo: true },
+		});
+		if (application) await photoAsAvatar(application.userId, application.photo);
 	}
 };
 

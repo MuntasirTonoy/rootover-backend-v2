@@ -3,6 +3,8 @@ import auth from "../../middlewares/auth.js";
 import validateRequest from "../../middlewares/validateRequest.js";
 import { ReportController as Reports } from "../report/report.controller.js";
 import { ReportValidation as RV } from "../report/report.validation.js";
+import { SettingsController as Settings } from "../settings/settings.controller.js";
+import { SettingsValidation as SV } from "../settings/settings.validation.js";
 import { AdminController as C } from "./admin.controller.js";
 import { AdminValidation as V } from "./admin.validation.js";
 
@@ -84,5 +86,14 @@ router.post(
 	validateRequest(RV.rejectFix),
 	Reports.rejectFix,
 );
+
+// Platform fees: a change is confirmed with a code emailed to the admin
+router.get("/settings", Settings.view);
+router.post(
+	"/settings/code",
+	validateRequest(SV.requestCode),
+	Settings.requestCode,
+);
+router.put("/settings", validateRequest(SV.save), Settings.save);
 
 export const AdminRoutes = router;

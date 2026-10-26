@@ -101,7 +101,9 @@ describe("reporting (students)", () => {
 			reporter: { id: s.id, name: s.name },
 			events: [{ type: "reported", actorName: s.name, actorRole: "student" }],
 		});
-		expect(created.lesson.videoUrl).toMatch(/^https:\/\/www\.youtube\.com\/embed\//);
+		expect(created.lesson.videoUrl).toMatch(
+			/^https:\/\/www\.youtube\.com\/embed\//,
+		);
 		expect(created.reporter).not.toHaveProperty("email");
 		expect(both.find((r) => r.status === 409)?.body.error.message).toBe(
 			"You've already reported this video. We'll update you when it's fixed.",
@@ -157,11 +159,17 @@ describe("fixing and reviewing", () => {
 			teacherNote: "Replaced the private video.",
 		});
 		expect(fix.body.fixSubmittedAt).toBeTruthy();
-		expect((await t1(`/teacher/reports/${id}/submit-fix`, { note: "Again please" })).status).toBe(422);
+		expect(
+			(await t1(`/teacher/reports/${id}/submit-fix`, { note: "Again please" }))
+				.status,
+		).toBe(422);
 
-		const adminBoard = await call("/admin/video-reports?status=action&limit=100", {
-			token: tokens["u-admin"],
-		});
+		const adminBoard = await call(
+			"/admin/video-reports?status=action&limit=100",
+			{
+				token: tokens["u-admin"],
+			},
+		);
 		expect(adminBoard.body.data[0].status).toBe("fix_submitted");
 
 		const noReason = await admin(`/admin/video-reports/${id}/reject-fix`, {});
@@ -189,8 +197,16 @@ describe("fixing and reviewing", () => {
 			"fix_approved",
 		]);
 		// resolved is final; teachers can't use the admin endpoints
-		expect((await admin(`/admin/video-reports/${id}/reject-fix`, { reason: "Changed my mind" })).status).toBe(422);
-		expect((await t1(`/admin/video-reports/${id}/approve-fix`)).status).toBe(403);
+		expect(
+			(
+				await admin(`/admin/video-reports/${id}/reject-fix`, {
+					reason: "Changed my mind",
+				})
+			).status,
+		).toBe(422);
+		expect((await t1(`/admin/video-reports/${id}/approve-fix`)).status).toBe(
+			403,
+		);
 
 		const logs = await prisma.activityLog.findMany({
 			where: {

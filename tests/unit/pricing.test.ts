@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { buildSeedData } from "../../prisma/seed/data.js";
 import {
-	COMMISSION_RATE,
+	DEFAULT_COMMISSION_RATE as RATE,
 	checkCoupon,
 	couponDiscount,
 	coursePrice,
@@ -13,7 +13,9 @@ import {
 
 describe("quote", () => {
 	it("spec test 1: ৳1,000 with a 20% coupon -> pays 800, commission 80, teacher 720", () => {
-		expect(quote({ price: 1000 }, { type: "percent", value: 20 })).toEqual({
+		expect(
+			quote({ price: 1000 }, { type: "percent", value: 20 }, RATE),
+		).toEqual({
 			listPrice: 1000,
 			coursePrice: 1000,
 			courseDiscount: 0,
@@ -28,6 +30,7 @@ describe("quote", () => {
 		const q = quote(
 			{ price: 1500, discountPrice: 1200 },
 			{ type: "fixed", value: 100 },
+			RATE,
 		);
 		expect(q.coursePrice).toBe(1200);
 		expect(q.courseDiscount).toBe(300);
@@ -37,7 +40,7 @@ describe("quote", () => {
 	});
 
 	it("spec test 3: a fixed coupon larger than the price makes it free, never negative", () => {
-		const q = quote({ price: 800 }, { type: "fixed", value: 5000 });
+		const q = quote({ price: 800 }, { type: "fixed", value: 5000 }, RATE);
 		expect(q.couponDiscount).toBe(800);
 		expect(q.total).toBe(0);
 		expect(q.commission).toBe(0);
@@ -45,7 +48,9 @@ describe("quote", () => {
 	});
 
 	it("works without a coupon", () => {
-		expect(quote({ price: 2000, discountPrice: 1600 })).toMatchObject({
+		expect(
+			quote({ price: 2000, discountPrice: 1600 }, null, RATE),
+		).toMatchObject({
 			coursePrice: 1600,
 			courseDiscount: 400,
 			couponDiscount: 0,
@@ -80,13 +85,13 @@ describe("couponDiscount / splitSale", () => {
 	});
 
 	it("commission is 10% of the amount paid, rounded; the rest goes to the teacher", () => {
-		expect(COMMISSION_RATE).toBe(0.1);
+		expect(RATE).toBe(0.1);
 		for (const amount of [0, 1, 5, 849, 999, 1015, 1530, 2250]) {
-			const { commission, teacherNet } = splitSale(amount);
+			const { commission, teacherNet } = splitSale(amount, RATE);
 			expect(commission).toBe(Math.round(amount * 0.1));
 			expect(commission + teacherNet).toBe(amount);
 		}
-		expect(splitSale(1015)).toEqual({ commission: 102, teacherNet: 913 });
+		expect(splitSale(1015, RATE)).toEqual({ commission: 102, teacherNet: 913 });
 	});
 });
 
@@ -171,5 +176,16 @@ describe("checkCoupon (spec test 7, seeded coupons)", () => {
 			{ ...data.coupons[0], id: "other", teacherId: "t2", courseId: null },
 		];
 		expect(check("PHYSICS20", "c-ssc-physics", shared).ok).toBe(true);
+	});
+});
+
+describe("admin-set commission rate", () => {
+	it("applies the rate passed in (e.g. 12.5%) to new quotes", () => {
+		expect(quote({ price: 1000 }, null, 0.125)).toMatchObject({
+			total: 1000,
+			commission: 125,
+			teacherNet: 875,
+		});
+		expect(splitSale(999, 0)).toEqual({ commission: 0, teacherNet: 999 });
 	});
 });

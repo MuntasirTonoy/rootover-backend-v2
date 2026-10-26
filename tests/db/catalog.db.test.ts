@@ -205,7 +205,8 @@ describe("GET /api/courses/:id (lesson access, spec test 8)", () => {
 			status: "active",
 		});
 		expect(body.teacher.stats.courses).toBe(2);
-		expect(body.reviews.length).toBeGreaterThan(0);
+		expect(body.rating.count).toBeGreaterThan(0);
+		expect(body).not.toHaveProperty("reviews");
 	});
 
 	it("an enrolled student gets every lesson plus progress and the resume lesson", async () => {

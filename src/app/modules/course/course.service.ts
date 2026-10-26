@@ -24,7 +24,6 @@ import {
 	toChaptersPublic,
 	toCourseSummary,
 	toLessonPublic,
-	toReviewResponse,
 	toTeacherPublic,
 } from "./course.utils.js";
 import type { COURSE_SORTS, CourseValidation } from "./course.validation.js";
@@ -185,11 +184,6 @@ const getCourse = async (
 		statusNote: row.statusNote ?? undefined,
 		published,
 		chapters: toChaptersPublic(row.chapters, access),
-		reviews: row.reviews.map(toReviewResponse),
-		myReview: (() => {
-			const mine = user && row.reviews.find((r) => r.studentId === user.id);
-			return mine ? toReviewResponse(mine) : undefined;
-		})(),
 		teacher: toTeacherPublic(row.teacher),
 		access,
 		enrollment: enrollment
@@ -204,6 +198,7 @@ const getCourse = async (
 					completedLessonIds: completedIds.filter((id) =>
 						lessonIds.includes(id),
 					),
+					rated: !!enrollment.ratedAt,
 				}
 			: undefined,
 	};

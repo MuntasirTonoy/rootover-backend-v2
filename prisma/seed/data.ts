@@ -5,7 +5,8 @@
 import {
 	CLEARING_DAYS,
 	quote,
-	REGISTRATION_FEE,
+	DEFAULT_COMMISSION_RATE,
+	DEFAULT_REGISTRATION_FEE as REGISTRATION_FEE,
 } from "../../src/app/utils/pricing.js";
 import type {
 	ActorRole,
@@ -481,25 +482,8 @@ export function buildSeedData(now = Date.now()) {
 		"c-other-c",
 	]);
 
-	const reviewPool: [string, number, string][] = [
-		[
-			"Ayesha Rahman",
-			5,
-			"Clear explanations and the board questions helped a lot.",
-		],
-		[
-			"Mehedi Hasan",
-			4,
-			"Very good course. A few more practice problems would be great.",
-		],
-		["Farhana Sultana", 5, "Best teacher I've had for this subject."],
-		["Arif Mahmud", 4, "Well structured, easy to follow at my own pace."],
-		[
-			"Lamia Haque",
-			5,
-			"The short lessons make it easy to revise before exams.",
-		],
-	];
+	// Star ratings for approved courses (kept only as totals per course)
+	const ratingPool = [5, 4, 5, 4, 5];
 
 	const courses = courseSeeds.map((seed, i) => {
 		const chapters = seed.chapters.map(([title, lessons], ci) => ({
@@ -522,18 +506,11 @@ export function buildSeedData(now = Date.now()) {
 				};
 			}),
 		}));
-		const reviews =
+		const ratings =
 			seed.status === "approved"
-				? reviewPool
+				? ratingPool
 						.slice(0, 2 + (i % 3))
-						.map(([studentName, rating, comment], r) => ({
-							id: `${seed.id}-r${r + 1}`,
-							courseId: seed.id,
-							studentName,
-							rating: (i + r) % 4 === 0 ? 4 : rating,
-							comment,
-							date: daysAgo(seed.createdDaysAgo - 20 - r * 10),
-						}))
+						.map((rating, r) => ((i + r) % 4 === 0 ? 4 : rating))
 				: [];
 		return {
 			id: seed.id,
@@ -550,8 +527,9 @@ export function buildSeedData(now = Date.now()) {
 			featured: seed.featured ?? false,
 			createdAt: daysAgo(seed.createdDaysAgo),
 			updatedAt: daysAgo(Math.max(0, seed.createdDaysAgo - 5)),
+			ratingSum: ratings.reduce((s, r) => s + r, 0),
+			ratingCount: ratings.length,
 			chapters,
-			reviews,
 		};
 	});
 	type SeedCourse = (typeof courses)[number];
@@ -700,7 +678,7 @@ export function buildSeedData(now = Date.now()) {
 			? coupons.find((c) => c.code === couponCode)
 			: undefined;
 		if (coupon) coupon.usedCount += 1;
-		const q = quote(course, coupon);
+		const q = quote(course, coupon, DEFAULT_COMMISSION_RATE);
 		const id = `p-${purchases.length + 1}`;
 		purchases.push({
 			id,

@@ -1,7 +1,8 @@
-// Teacher application workflow (BACKEND_SPEC section 8):
-// pending_review -(admin: request fee)-> payment_required -(applicant pays ৳300
-// through bKash)-> under_verification -(admin: approve)-> approved; any of the
-// three open states -(admin: reject + reason)-> rejected.
+// Teacher application workflow (BACKEND_SPEC section 8, changed 2026-10-26):
+// pending_review -(admin: request fee, emails the applicant)-> payment_required
+// -(applicant pays the registration fee through bKash)-> approved automatically.
+// under_verification -(admin: approve)-> approved remains for applications that
+// were paid before that change. Any open state -(admin: reject)-> rejected.
 import httpStatus from "http-status";
 import type { z } from "zod";
 import type {
@@ -10,14 +11,20 @@ import type {
 	User,
 } from "../../../generated/prisma/client.js";
 import AppError from "../../errors/AppError.js";
-import { isPrismaKnownError } from "../../errors/handlePrismaError.js";
+import { sendMail } from "../../lib/mailer.js";
 import prisma from "../../lib/prisma.js";
-import { storage } from "../../lib/storage.js";
 import { logActivity } from "../../utils/activity.js";
 import { pageMeta, skipTake } from "../../utils/pagination.js";
 import { PaymentService } from "../payment/payment.service.js";
+import { SettingsService } from "../settings/settings.service.js";
 import { ownApplicationDoc, privateUrl } from "../upload/upload.service.js";
 import { toTeacherProfileResponse } from "../user/user.utils.js";
+import {
+	createTeacher,
+	isTeacherCodeClash,
+	photoAsAvatar,
+} from "./application.approval.js";
+import { feeRequestEmail } from "./application.emails.js";
 import {
 	toApplicationResponse,
 	toRegistrationFeeResponse,
@@ -154,9 +161,9 @@ const transition = async (
 	return tx.teacherApplication.findUniqueOrThrow({ where: { id: where.id } });
 };
 
-// The applicant pays the ৳300 registration fee through bKash: this starts the
-// payment ({ paymentId, redirectURL }); the fee is recorded and the application
-// moves to under_verification when bKash confirms it (payment module).
+// The applicant pays the registration fee through bKash: this starts the
+// payment ({ paymentId, redirectURL }); when bKash confirms it, the fee is
+// recorded and the application approved (payment module).
 const payFee = async (user: User, id: string) => {
 	// Only the applicant's own application; anyone else gets a 404
 	const application = await prisma.teacherApplication.findFirst({
@@ -226,6 +233,8 @@ const adminDetail = async (id: string) => {
 	};
 };
 
+// Asks the applicant for the registration fee and emails them about it. The
+// email is best-effort and sent after the change: a mail outage never undoes it.
 const requestPayment = async (admin: User, id: string) => {
 	const application = await prisma.$transaction(async (tx) => {
 		const updated = await transition(tx, { id }, ["pending_review"], {
@@ -239,6 +248,23 @@ const requestPayment = async (admin: User, id: string) => {
 		);
 		return updated;
 	});
+	try {
+		const [applicant, { registrationFee }] = await Promise.all([
+			prisma.user.findUniqueOrThrow({
+				where: { id: application.userId },
+				select: { email: true },
+			}),
+			SettingsService.get(),
+		]);
+		await sendMail(
+			feeRequestEmail(applicant.email, application.fullName, registrationFee),
+		);
+	} catch (err) {
+		console.error(
+			`[application] couldn't email the fee request for ${application.id}`,
+			err,
+		);
+	}
 	return toApplicationResponse(application);
 };
 
@@ -259,64 +285,10 @@ const reject = async (admin: User, id: string, reason: string) => {
 	return toApplicationResponse(application);
 };
 
-// A new teacher without an avatar gets a public copy of their application
-// photo. Best-effort: approval never fails because of it.
-const photoAsAvatar = async (userId: string, photo: unknown) => {
-	const uploadId = (photo as { uploadId?: unknown } | null)?.uploadId;
-	if (typeof uploadId !== "string") return;
-	try {
-		const [user, upload] = await Promise.all([
-			prisma.user.findUniqueOrThrow({ where: { id: userId } }),
-			prisma.upload.findUnique({ where: { id: uploadId } }),
-		]);
-		if (user.avatar || !upload) return;
-		const copy = await storage.copyToPublic(upload, "avatars");
-		await prisma.$transaction([
-			prisma.upload.create({
-				data: {
-					userId,
-					purpose: "avatar",
-					publicId: copy.publicId,
-					private: false,
-					url: copy.url,
-					format: copy.format,
-					mime: upload.mime,
-					name: upload.name,
-					size: upload.size,
-				},
-			}),
-			prisma.user.update({ where: { id: userId }, data: { avatar: copy.url } }),
-		]);
-	} catch (err) {
-		console.error(
-			`[application] couldn't copy ${userId}'s photo as avatar`,
-			err,
-		);
-	}
-};
-
-const CODE_PREFIX = "RO-T-26-";
-
-// RO-T-26-<4 digits>, serial = 101 + existing profiles (spec section 8), moved
-// past any code already taken
-const nextTeacherCode = async (tx: Prisma.TransactionClient) => {
-	const [count, codes] = await Promise.all([
-		tx.teacherProfile.count(),
-		tx.teacherProfile.findMany({
-			where: { teacherCode: { startsWith: CODE_PREFIX } },
-			select: { teacherCode: true },
-		}),
-	]);
-	const highest = Math.max(
-		100,
-		...codes.map((c) => Number(c.teacherCode.slice(CODE_PREFIX.length)) || 0),
-	);
-	const serial = Math.max(101 + count, highest + 1);
-	return `${CODE_PREFIX}${String(serial).padStart(4, "0")}`;
-};
-
-// Creates the teacher profile, links it, and turns the student into a teacher,
-// all in one transaction. Retried if two approvals pick the same Teacher ID.
+// Manual approval, for applications that reached under_verification before the
+// fee approved them automatically. Creates the teacher profile, links it, and
+// turns the student into a teacher, all in one transaction. Retried if two
+// approvals pick the same Teacher ID.
 const approve = async (admin: User, id: string) => {
 	for (let attempt = 1; ; attempt++) {
 		try {
@@ -327,31 +299,14 @@ const approve = async (admin: User, id: string) => {
 					["under_verification"],
 					{ status: "approved" },
 				);
-				const applicant = await tx.user.findUniqueOrThrow({
-					where: { id: application.userId },
-				});
-				const teacher = await tx.teacherProfile.create({
-					data: {
-						userId: applicant.id,
-						teacherCode: await nextTeacherCode(tx),
-					},
-				});
-				const updated = await tx.teacherApplication.update({
-					where: { id },
-					data: { teacherId: teacher.id },
-				});
-				if (applicant.role === "student")
-					await tx.user.update({
-						where: { id: applicant.id },
-						data: { role: "teacher" },
-					});
+				const created = await createTeacher(tx, application);
 				await logActivity(
 					tx,
 					admin,
 					"Approved teacher application",
 					application.fullName,
 				);
-				return { application: updated, teacher };
+				return created;
 			});
 			await photoAsAvatar(result.application.userId, result.application.photo);
 			return {
@@ -359,11 +314,7 @@ const approve = async (admin: User, id: string) => {
 				teacher: toTeacherProfileResponse(result.teacher),
 			};
 		} catch (err) {
-			const codeClash =
-				isPrismaKnownError(err) &&
-				err.code === "P2002" &&
-				JSON.stringify(err.meta ?? {}).includes("teacherCode");
-			if (!codeClash || attempt >= 3) throw err;
+			if (!isTeacherCodeClash(err) || attempt >= 3) throw err;
 		}
 	}
 };

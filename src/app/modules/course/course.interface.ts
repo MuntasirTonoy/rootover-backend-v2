@@ -25,14 +25,6 @@ export interface ChapterPublic {
 	lessons: LessonPublic[];
 }
 
-export interface ReviewResponse {
-	id: string;
-	studentName: string;
-	rating: number;
-	comment: string;
-	date: string;
-}
-
 export interface Rating {
 	average: number;
 	count: number;
@@ -91,9 +83,6 @@ export interface CourseDetail extends Omit<CourseSummary, "teacher"> {
 	// In the catalog? false = the owner or an admin previewing it
 	published: boolean;
 	chapters: ChapterPublic[];
-	reviews: ReviewResponse[];
-	// The signed-in student's own review (not in the spec), to pre-fill the form
-	myReview?: ReviewResponse;
 	teacher: TeacherPublic;
 	access: CourseAccess;
 	// completedLessonIds (not in the spec) drives the player's checkmarks
@@ -101,6 +90,8 @@ export interface CourseDetail extends Omit<CourseSummary, "teacher"> {
 		progress: Progress;
 		resumeLessonId?: string;
 		completedLessonIds: string[];
+		// Each buyer may rate the course once (not in the spec)
+		rated: boolean;
 	};
 }
 
@@ -135,7 +126,7 @@ export interface CourseResponse {
 	status: CourseStatus;
 	statusNote?: string;
 	chapters: { id: string; title: string; lessons: LessonResponse[] }[];
-	reviews: ReviewResponse[];
+	rating: Rating;
 	featured: boolean;
 	createdAt: string;
 	updatedAt: string;

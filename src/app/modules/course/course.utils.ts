@@ -12,7 +12,6 @@ import type {
 	LessonPublic,
 	Progress,
 	Rating,
-	ReviewResponse,
 	TeacherPublic,
 } from "./course.interface.js";
 import type {
@@ -22,14 +21,16 @@ import type {
 	TeacherPublicRow,
 } from "./course.queries.js";
 
-// Average rounded to one decimal; 0 when there are no reviews
-export const ratingOf = (reviews: { rating: number }[]): Rating => {
-	const count = reviews.length;
-	const average = count
-		? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / count) * 10) / 10
-		: 0;
-	return { average, count };
-};
+// Average rounded to one decimal; 0 when nobody has rated yet
+export const ratingOf = (totals: {
+	ratingSum: number;
+	ratingCount: number;
+}): Rating => ({
+	average: totals.ratingCount
+		? Math.round((totals.ratingSum / totals.ratingCount) * 10) / 10
+		: 0,
+	count: totals.ratingCount,
+});
 
 export const toCourseSummary = (row: CourseSummaryRow): CourseSummary => {
 	const lessons = row.chapters.flatMap((ch) => ch.lessons);
@@ -48,7 +49,7 @@ export const toCourseSummary = (row: CourseSummaryRow): CourseSummary => {
 			name: row.teacher.user.name,
 			avatar: row.teacher.user.avatar ?? undefined,
 		},
-		rating: ratingOf(row.reviews),
+		rating: ratingOf(row),
 		studentCount: row._count.enrollments,
 		lessonCount: lessons.length,
 		chapterCount: row.chapters.length,
@@ -59,7 +60,11 @@ export const toCourseSummary = (row: CourseSummaryRow): CourseSummary => {
 };
 
 export const toTeacherPublic = (row: TeacherPublicRow): TeacherPublic => {
-	const reviews = row.courses.flatMap((c) => c.reviews);
+	// Across all their catalog courses, weighted by the number of ratings
+	const rating = ratingOf({
+		ratingSum: row.courses.reduce((s, c) => s + c.ratingSum, 0),
+		ratingCount: row.courses.reduce((s, c) => s + c.ratingCount, 0),
+	});
 	const students = new Set(
 		row.courses.flatMap((c) => c.enrollments.map((e) => e.studentId)),
 	);
@@ -72,8 +77,8 @@ export const toTeacherPublic = (row: TeacherPublicRow): TeacherPublic => {
 		stats: {
 			courses: row.courses.length,
 			students: students.size,
-			rating: ratingOf(reviews).average,
-			reviewCount: reviews.length,
+			rating: rating.average,
+			reviewCount: rating.count,
 		},
 	};
 };
@@ -120,16 +125,6 @@ export const toChaptersPublic = (
 		title: ch.title,
 		lessons: ch.lessons.map((l) => toLessonPublic(l, access)),
 	}));
-
-export const toReviewResponse = (
-	r: CourseDetailRow["reviews"][number],
-): ReviewResponse => ({
-	id: r.id,
-	studentName: r.studentName,
-	rating: r.rating,
-	comment: r.comment,
-	date: r.date.toISOString(),
-});
 
 // Lessons in curriculum order (chapters and lessons are ordered by position)
 export const flatLessons = (chapters: CourseDetailRow["chapters"]) =>
@@ -189,7 +184,7 @@ export const toCourseResponse = (row: CourseFullRow): CourseResponse => ({
 			isPreview: l.isPreview,
 		})),
 	})),
-	reviews: row.reviews.map(toReviewResponse),
+	rating: ratingOf(row),
 	featured: row.featured,
 	createdAt: row.createdAt.toISOString(),
 	updatedAt: row.updatedAt.toISOString(),

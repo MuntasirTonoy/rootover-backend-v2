@@ -34,8 +34,13 @@ const newStudent = async (name: string) => {
 	return { id: u.id, token: await tokenFor(u.id) };
 };
 
-const up = (token: string | undefined, purpose: string, name: string, bytes: number[], extra = 0) =>
-	uploadFile(app.base, token, purpose, name, bytes, extra);
+const up = (
+	token: string | undefined,
+	purpose: string,
+	name: string,
+	bytes: number[],
+	extra = 0,
+) => uploadFile(app.base, token, purpose, name, bytes, extra);
 
 beforeAll(async () => {
 	app = startApp();
@@ -55,48 +60,90 @@ afterAll(async () => {
 
 describe("POST /api/uploads", () => {
 	it("stores public images and types files by their bytes", async () => {
-		expect((await up(undefined, "avatar", "a.jpg", FILE_BYTES.jpeg)).status).toBe(401);
+		expect(
+			(await up(undefined, "avatar", "a.jpg", FILE_BYTES.jpeg)).status,
+		).toBe(401);
 		const s = await newStudent("Uploader");
 
 		const avatar = await up(s.token, "avatar", "../../me.jpg", FILE_BYTES.jpeg);
 		expect(avatar.status).toBe(201);
-		expect(avatar.body).toMatchObject({ name: "me.jpg", type: "image/jpeg", size: FILE_BYTES.jpeg.length });
+		expect(avatar.body).toMatchObject({
+			name: "me.jpg",
+			type: "image/jpeg",
+			size: FILE_BYTES.jpeg.length,
+		});
 		expect(avatar.body.url).toMatch(/^https:\/\/storage\.test\/.+\/avatars\//);
 
 		// A GIF named .jpg, and a PDF as an avatar, are both refused
 		const gif = await up(s.token, "avatar", "fake.jpg", FILE_BYTES.gif);
 		expect(gif.status).toBe(400);
-		expect(gif.body.error.fields.file).toBe("Upload a JPEG, PNG or WebP image.");
-		expect((await up(s.token, "avatar", "doc.pdf", FILE_BYTES.pdf)).status).toBe(400);
+		expect(gif.body.error.fields.file).toBe(
+			"Upload a JPEG, PNG or WebP image.",
+		);
+		expect(
+			(await up(s.token, "avatar", "doc.pdf", FILE_BYTES.pdf)).status,
+		).toBe(400);
 
-		const big = await up(s.token, "avatar", "big.png", FILE_BYTES.png, 5 * 1024 * 1024);
+		const big = await up(
+			s.token,
+			"avatar",
+			"big.png",
+			FILE_BYTES.png,
+			5 * 1024 * 1024,
+		);
 		expect(big.status).toBe(400);
 		expect(big.body.error.message).toBe("Files must be 5 MB or smaller.");
 
 		const purpose = await up(s.token, "banner", "a.png", FILE_BYTES.png);
 		expect(purpose.status).toBe(400);
-		expect((await up(s.token, "thumbnail", "t.png", FILE_BYTES.png)).status).toBe(403);
+		expect(
+			(await up(s.token, "thumbnail", "t.png", FILE_BYTES.png)).status,
+		).toBe(403);
 	});
 
 	it("keeps application documents private: only the uploader and admins get a link", async () => {
 		const owner = await newStudent("DocOwner");
 		const other = await newStudent("DocOther");
-		const doc = await up(owner.token, "application-doc", "ssc.pdf", FILE_BYTES.pdf);
+		const doc = await up(
+			owner.token,
+			"application-doc",
+			"ssc.pdf",
+			FILE_BYTES.pdf,
+		);
 		expect(doc.status).toBe(201);
 		expect(doc.body.type).toBe("application/pdf");
-		expect(doc.body.url).toMatch(new RegExp(`/api/uploads/private/${doc.body.id}$`));
+		expect(doc.body.url).toMatch(
+			new RegExp(`/api/uploads/private/${doc.body.id}$`),
+		);
 
-		const mine = await call(`/uploads/private/${doc.body.id}`, { token: owner.token });
+		const mine = await call(`/uploads/private/${doc.body.id}`, {
+			token: owner.token,
+		});
 		expect(mine.status).toBe(200);
 		expect(mine.body.url).toMatch(/^https:\/\/storage\.test\/signed\//);
-		expect(mine.body).toMatchObject({ name: "ssc.pdf", type: "application/pdf" });
-		expect((await call(`/uploads/private/${doc.body.id}`, { token: other.token })).status).toBe(404);
-		expect((await call(`/uploads/private/${doc.body.id}`, { token: tokens["u-admin"] })).status).toBe(200);
+		expect(mine.body).toMatchObject({
+			name: "ssc.pdf",
+			type: "application/pdf",
+		});
+		expect(
+			(await call(`/uploads/private/${doc.body.id}`, { token: other.token }))
+				.status,
+		).toBe(404);
+		expect(
+			(
+				await call(`/uploads/private/${doc.body.id}`, {
+					token: tokens["u-admin"],
+				})
+			).status,
+		).toBe(200);
 		expect((await call(`/uploads/private/${doc.body.id}`)).status).toBe(401);
 
 		// A public upload has no private link
 		const avatar = await up(owner.token, "avatar", "a.png", FILE_BYTES.png);
-		expect((await call(`/uploads/private/${avatar.body.id}`, { token: owner.token })).status).toBe(404);
+		expect(
+			(await call(`/uploads/private/${avatar.body.id}`, { token: owner.token }))
+				.status,
+		).toBe(404);
 	});
 });
 
@@ -113,7 +160,9 @@ describe("references must be your own uploads", () => {
 
 		const random = await patch("https://example.com/me.png");
 		expect(random.status).toBe(400);
-		expect(random.body.error.fields.avatar).toBe("Choose one of the avatars or upload a photo.");
+		expect(random.body.error.fields.avatar).toBe(
+			"Choose one of the avatars or upload a photo.",
+		);
 
 		const foreign = await up(other.token, "avatar", "o.png", FILE_BYTES.png);
 		expect((await patch(foreign.body.url)).status).toBe(400);

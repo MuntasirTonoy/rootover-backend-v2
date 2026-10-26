@@ -2,8 +2,10 @@
 // frontend has no copy: it reads prices and quotes from the API and these
 // constants from GET /api/config. All amounts are integer BDT.
 
-export const COMMISSION_RATE = 0.1;
-export const REGISTRATION_FEE = 300;
+// Defaults for the admin-editable settings (modules/settings); the live values
+// come from SettingsService.get()
+export const DEFAULT_COMMISSION_RATE = 0.1;
+export const DEFAULT_REGISTRATION_FEE = 300;
 // Sales stay in "pending clearance" this many days before they can be withdrawn
 export const CLEARING_DAYS = 7;
 export const MIN_WITHDRAWAL = 500;
@@ -25,9 +27,10 @@ export function discountPercent(course: Priced): number {
 		: 0;
 }
 
-// Commission is 10% of what the student actually paid, after all discounts
-export function splitSale(amountPaid: number) {
-	const commission = Math.round(amountPaid * COMMISSION_RATE);
+// Commission is the platform rate (10% by default) of what the student actually
+// paid, after all discounts
+export function splitSale(amountPaid: number, commissionRate: number) {
+	const commission = Math.round(amountPaid * commissionRate);
 	return { commission, teacherNet: amountPaid - commission };
 }
 
@@ -49,7 +52,11 @@ export interface Quote {
 	teacherNet: number;
 }
 
-export function quote(course: Priced, coupon?: CouponValue | null): Quote {
+export function quote(
+	course: Priced,
+	coupon: CouponValue | null | undefined,
+	commissionRate: number,
+): Quote {
 	const base = coursePrice(course);
 	const off = coupon ? couponDiscount(base, coupon) : 0;
 	const total = base - off;
@@ -59,7 +66,7 @@ export function quote(course: Priced, coupon?: CouponValue | null): Quote {
 		courseDiscount: course.price - base,
 		couponDiscount: off,
 		total,
-		...splitSale(total),
+		...splitSale(total, commissionRate),
 	};
 }
 

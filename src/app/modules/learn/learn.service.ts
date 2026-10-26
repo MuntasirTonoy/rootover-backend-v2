@@ -4,14 +4,13 @@ import httpStatus from "http-status";
 import type { User } from "../../../generated/prisma/client.js";
 import AppError from "../../errors/AppError.js";
 import prisma from "../../lib/prisma.js";
-import { logActivity } from "../../utils/activity.js";
 import type {
 	CourseDetail,
 	Progress,
-	ReviewResponse,
+	Rating,
 } from "../course/course.interface.js";
 import { CourseService } from "../course/course.service.js";
-import { progressOf, toReviewResponse } from "../course/course.utils.js";
+import { progressOf, ratingOf } from "../course/course.utils.js";
 
 export interface PlayerData {
 	course: CourseDetail;
@@ -113,46 +112,41 @@ const setComplete = async (
 	};
 };
 
-// One review per student per course (rating 1-5, optional comment); sending it
-// again updates it. Only students who own the course may rate it.
-const saveReview = async (
+// A buyer rates a course once, 1-5 stars. Nothing about the rating is stored
+// against the student: the course keeps a running total and count, and the
+// enrollment only remembers that it has rated (so it can't rate twice).
+const rateCourse = async (
 	user: User,
 	courseId: string,
-	input: { rating: number; comment: string },
-): Promise<ReviewResponse> => {
+	rating: number,
+): Promise<{ rating: Rating }> => {
 	const enrollment = await enrollmentOf(user.id, courseId);
 	if (!enrollment)
 		throw new AppError(
 			httpStatus.FORBIDDEN,
 			"Only students who bought this course can rate it.",
 		);
-	const review = await prisma.$transaction(async (tx) => {
-		const saved = await tx.review.upsert({
-			where: { courseId_studentId: { courseId, studentId: user.id } },
-			create: {
-				courseId,
-				studentId: user.id,
-				studentName: user.name,
-				rating: input.rating,
-				comment: input.comment,
-			},
-			update: {
-				studentName: user.name,
-				rating: input.rating,
-				comment: input.comment,
-				date: new Date(),
-			},
-			include: { course: { select: { title: true } } },
+	const course = await prisma.$transaction(async (tx) => {
+		// Guarded on ratedAt: two requests at once can't both count
+		const { count } = await tx.enrollment.updateMany({
+			where: { id: enrollment.id, ratedAt: null },
+			data: { ratedAt: new Date() },
 		});
-		await logActivity(
-			tx,
-			user,
-			`Rated a course ${saved.rating}/5`,
-			saved.course.title,
-		);
-		return saved;
+		if (count === 0)
+			throw new AppError(
+				httpStatus.CONFLICT,
+				"You've already rated this course.",
+			);
+		return tx.course.update({
+			where: { id: courseId },
+			data: {
+				ratingSum: { increment: rating },
+				ratingCount: { increment: 1 },
+			},
+			select: { ratingSum: true, ratingCount: true },
+		});
 	});
-	return toReviewResponse(review);
+	return { rating: ratingOf(course) };
 };
 
-export const LearnService = { getPlayer, recordWatch, setComplete, saveReview };
+export const LearnService = { getPlayer, recordWatch, setComplete, rateCourse };

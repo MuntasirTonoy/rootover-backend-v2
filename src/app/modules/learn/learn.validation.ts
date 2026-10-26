@@ -13,7 +13,7 @@ const complete = z.object({
 
 const RATING_MESSAGE = "Choose a rating from 1 to 5 stars.";
 
-const review = z.object({
+const rating = z.object({
 	params: z.object({ courseId: id }),
 	body: z.object({
 		rating: z
@@ -21,13 +21,7 @@ const review = z.object({
 			.int(RATING_MESSAGE)
 			.min(1, RATING_MESSAGE)
 			.max(5, RATING_MESSAGE),
-		comment: z
-			.string()
-			.trim()
-			.max(1000, "Keep the review under 1000 characters.")
-			.optional()
-			.default(""),
 	}),
 });
 
-export const LearnValidation = { player, lesson, complete, review };
+export const LearnValidation = { player, lesson, complete, rating };

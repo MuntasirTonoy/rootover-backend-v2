@@ -61,7 +61,7 @@ async function main() {
 			await tx.teacherApplication.createMany({ data: data.applications });
 			await tx.registrationFee.createMany({ data: data.registrationFees });
 			await tx.course.createMany({
-				data: data.courses.map(({ chapters: _c, reviews: _r, ...c }) => c),
+				data: data.courses.map(({ chapters: _c, ...c }) => c),
 			});
 			await tx.chapter.createMany({
 				data: data.courses.flatMap((c) =>
@@ -72,9 +72,6 @@ async function main() {
 				),
 			});
 			await tx.lesson.createMany({ data: lessons });
-			await tx.review.createMany({
-				data: data.courses.flatMap((c) => c.reviews),
-			});
 			await tx.coupon.createMany({ data: data.coupons });
 			await tx.purchase.createMany({ data: data.purchases });
 			await tx.enrollment.createMany({

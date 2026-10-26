@@ -28,12 +28,12 @@ router.put(
 	LearnController.setComplete,
 );
 
-// Create or update the student's own rating of a course they bought
-router.put(
-	"/:courseId/review",
+// A buyer rates the course once (1-5 stars, no comment)
+router.post(
+	"/:courseId/rating",
 	auth("student"),
-	validateRequest(LearnValidation.review),
-	LearnController.saveReview,
+	validateRequest(LearnValidation.rating),
+	LearnController.rateCourse,
 );
 
 // Any signed-in user reaches the service, which answers teachers and admins

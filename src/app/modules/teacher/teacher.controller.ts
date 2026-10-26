@@ -6,6 +6,7 @@ import { quote } from "../../utils/pricing.js";
 import { toEmbedUrl } from "../../utils/youtube.js";
 import { TeacherCouponService as Coupons } from "./teacher.coupons.js";
 import { TeacherCourseService as Courses } from "./teacher.courses.js";
+import { SettingsService } from "../settings/settings.service.js";
 import { TeacherService } from "./teacher.service.js";
 
 // validateRequest has already replaced req.params / req.query with parsed values
@@ -44,7 +45,8 @@ const pricePreview = async (req: Request, res: Response) => {
 		price: number;
 		discountPrice: number | null;
 	};
-	res.json(quote({ price, discountPrice }));
+	const { commissionRate } = await SettingsService.get();
+	res.json(quote({ price, discountPrice }, null, commissionRate));
 };
 
 // ---------------------------------------------------------------- courses

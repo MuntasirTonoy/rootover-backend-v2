@@ -17,17 +17,13 @@ import {
 import { LearnRoutes } from "../modules/learn/learn.route.js";
 import { PaymentRoutes } from "../modules/payment/payment.route.js";
 import { StudentRoutes } from "../modules/student/student.route.js";
+import { SettingsService } from "../modules/settings/settings.service.js";
 import { TeacherRoutes } from "../modules/teacher/teacher.route.js";
 import { TeachersRoutes } from "../modules/teachers/teachers.route.js";
 import { UploadRoutes } from "../modules/upload/upload.route.js";
 import { UserRoutes } from "../modules/user/user.route.js";
 
-import {
-	CLEARING_DAYS,
-	COMMISSION_RATE,
-	MIN_WITHDRAWAL,
-	REGISTRATION_FEE,
-} from "../utils/pricing.js";
+import { CLEARING_DAYS, MIN_WITHDRAWAL } from "../utils/pricing.js";
 
 const router = Router();
 
@@ -36,10 +32,12 @@ router.get("/health", (req: Request, res: Response) => {
 });
 
 // Platform constants the frontend displays (it keeps no copy of them)
-router.get("/config", (req: Request, res: Response) => {
+router.get("/config", async (req: Request, res: Response) => {
+	// Admin-editable fees (modules/settings)
+	const fees = await SettingsService.get();
 	res.json({
-		commissionRate: COMMISSION_RATE,
-		registrationFee: REGISTRATION_FEE,
+		commissionRate: fees.commissionRate,
+		registrationFee: fees.registrationFee,
 		clearingDays: CLEARING_DAYS,
 		minWithdrawal: MIN_WITHDRAWAL,
 		avatarPresets: AVATAR_PRESETS,

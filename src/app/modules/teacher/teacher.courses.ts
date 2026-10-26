@@ -163,7 +163,6 @@ const listCourses = async (
 		},
 		include: {
 			chapters: { select: { _count: { select: { lessons: true } } } },
-			reviews: { select: { rating: true } },
 			purchases: { select: saleRowSelect },
 			_count: { select: { enrollments: true } },
 		},
@@ -182,7 +181,7 @@ const listCourses = async (
 		effectivePrice: coursePrice(c),
 		students: c._count.enrollments,
 		net: salesTotals(c.purchases).teacherNet,
-		rating: ratingOf(c.reviews),
+		rating: ratingOf(c),
 		chapters: c.chapters.length,
 		lessons: c.chapters.reduce((s, ch) => s + ch._count.lessons, 0),
 		updatedAt: c.updatedAt.toISOString(),

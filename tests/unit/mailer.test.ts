@@ -1,7 +1,12 @@
 // The Resend mailer against a mocked API
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mail = { to: "a@b.test", subject: "Code", text: "123456", html: "<b>123456</b>" };
+const mail = {
+	to: "a@b.test",
+	subject: "Code",
+	text: "123456",
+	html: "<b>123456</b>",
+};
 
 const loadMailer = async (key: string | undefined) => {
 	vi.resetModules();
@@ -22,7 +27,10 @@ describe("mailer", () => {
 		const { mailerMode, sendMail } = await loadMailer("re_test");
 		expect(mailerMode()).toBe("resend");
 		await sendMail(mail);
-		const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+		const [url, init] = fetchMock.mock.calls[0] as unknown as [
+			string,
+			RequestInit,
+		];
 		expect(url).toBe("https://api.resend.com/emails");
 		expect(init.headers).toMatchObject({ Authorization: "Bearer re_test" });
 		expect(JSON.parse(String(init.body))).toEqual({
@@ -37,10 +45,15 @@ describe("mailer", () => {
 	it("throws Resend's message when it refuses", async () => {
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () => new Response('{"message":"Domain not verified"}', { status: 403 })),
+			vi.fn(
+				async () =>
+					new Response('{"message":"Domain not verified"}', { status: 403 }),
+			),
 		);
 		const { sendMail } = await loadMailer("re_test");
-		await expect(sendMail(mail)).rejects.toThrow("Resend rejected the email (403): Domain not verified");
+		await expect(sendMail(mail)).rejects.toThrow(
+			"Resend rejected the email (403): Domain not verified",
+		);
 	});
 
 	it("falls back to the console without a key", async () => {

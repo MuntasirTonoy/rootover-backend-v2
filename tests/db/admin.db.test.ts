@@ -120,7 +120,10 @@ describe("courses", () => {
 			});
 			expect(approveRejected.status).toBe(422);
 
-			await prisma.course.update({ where: { id }, data: { status: "pending" } });
+			await prisma.course.update({
+				where: { id },
+				data: { status: "pending" },
+			});
 			const approved = await admin(`/admin/courses/${id}/approve`, {
 				method: "POST",
 			});
@@ -137,7 +140,11 @@ describe("courses", () => {
 			expect(reinstated.body.status).toBe("approved");
 
 			const logs = await prisma.activityLog.findMany({
-				where: { actorId: "u-admin", at: { gte: startedAt }, target: before.title },
+				where: {
+					actorId: "u-admin",
+					at: { gte: startedAt },
+					target: before.title,
+				},
 			});
 			expect(logs.map((l) => l.action).sort()).toEqual([
 				"Approved course",
@@ -145,7 +152,9 @@ describe("courses", () => {
 				"Rejected course",
 				"Suspended course",
 			]);
-			expect((await admin("/admin/courses/nope/approve", { method: "POST" })).status).toBe(404);
+			expect(
+				(await admin("/admin/courses/nope/approve", { method: "POST" })).status,
+			).toBe(404);
 		} finally {
 			await prisma.course.update({
 				where: { id },
@@ -174,7 +183,9 @@ describe("people", () => {
 			await prisma.user.count({ where: { role: "student" } }),
 		);
 		const s1 = s.body.data.find((r: { id: string }) => r.id === "u-s1");
-		const bought = await prisma.purchase.findMany({ where: { studentId: "u-s1" } });
+		const bought = await prisma.purchase.findMany({
+			where: { studentId: "u-s1" },
+		});
 		expect(s1.totalSpent).toBe(salesTotals(bought).gross);
 		expect(s1).not.toHaveProperty("passwordHash");
 	});
@@ -187,10 +198,14 @@ describe("people", () => {
 			});
 			expect(ban.body.status).toBe("banned");
 			// The banned teacher is locked out and their courses leave the catalog
-			expect((await call("/teacher/me", { token: tokens["u-t1"] })).status).toBe(403);
+			expect(
+				(await call("/teacher/me", { token: tokens["u-t1"] })).status,
+			).toBe(403);
 			const catalog = await call("/courses?limit=100");
 			expect(
-				catalog.body.data.some((c: { teacher: { id: string } }) => c.teacher.id === "t1"),
+				catalog.body.data.some(
+					(c: { teacher: { id: string } }) => c.teacher.id === "t1",
+				),
 			).toBe(false);
 			const unban = await admin("/admin/users/u-t1/status", {
 				method: "PATCH",
@@ -204,7 +219,10 @@ describe("people", () => {
 			});
 			expect(self.status).toBe(422);
 		} finally {
-			await prisma.user.update({ where: { id: "u-t1" }, data: { status: "active" } });
+			await prisma.user.update({
+				where: { id: "u-t1" },
+				data: { status: "active" },
+			});
 		}
 	});
 });
@@ -218,7 +236,9 @@ describe("money", () => {
 
 		const tx = await admin("/admin/transactions?status=refunded");
 		expect(tx.status).toBe(200);
-		const refunded = await prisma.purchase.findMany({ where: { status: "refunded" } });
+		const refunded = await prisma.purchase.findMany({
+			where: { status: "refunded" },
+		});
 		expect(tx.body.pagination.total).toBe(refunded.length);
 		expect(tx.body.totals).toEqual(salesTotals(refunded));
 		if (tx.body.data[0]) {
@@ -311,9 +331,9 @@ describe("admin roles", () => {
 
 			const demoted = await role(u.id, "student");
 			expect(demoted.body.role).toBe("student");
-			expect(
-				(await call("/admin/overview", { token: newToken })).status,
-			).toBe(401);
+			expect((await call("/admin/overview", { token: newToken })).status).toBe(
+				401,
+			);
 
 			// Teachers and unknown users can't be made admins; nor can you change yourself
 			expect((await role("u-t1", "admin")).status).toBe(422);
