@@ -132,13 +132,28 @@ describe("a teacher's purchased courses", () => {
 		const lesson = (await call(`/learn/${course.id}`, { token })).body.course
 			.chapters[0].lessons[0];
 		expect(lesson.canWatch).toBe(true);
-		expect(
-			(
-				await call(`/learn/${course.id}/lessons/${lesson.id}/watch`, {
-					method: "POST",
-					token,
-				})
-			).status,
-		).toBe(204);
+		// Watching moves the "continue learning" position: put it back afterwards
+		const enrollment = await prisma.enrollment.findFirstOrThrow({
+			where: { studentId: "u-s1", courseId: course.id },
+			select: { id: true, lastLessonId: true, lastWatchedAt: true },
+		});
+		try {
+			expect(
+				(
+					await call(`/learn/${course.id}/lessons/${lesson.id}/watch`, {
+						method: "POST",
+						token,
+					})
+				).status,
+			).toBe(204);
+		} finally {
+			await prisma.enrollment.update({
+				where: { id: enrollment.id },
+				data: {
+					lastLessonId: enrollment.lastLessonId,
+					lastWatchedAt: enrollment.lastWatchedAt,
+				},
+			});
+		}
 	});
 });
