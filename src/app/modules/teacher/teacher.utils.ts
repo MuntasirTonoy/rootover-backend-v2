@@ -32,8 +32,6 @@ export function validateForSubmit(
 	if (!c.subject.trim()) e.subject = "Enter the subject, e.g. Physics.";
 	if (c.description.trim().length < 20)
 		e.description = "Describe the course in at least 20 characters.";
-	if (!c.outcomes.some((o) => o.trim()))
-		e.outcomes = "Add at least one learning outcome.";
 	if (!Number.isInteger(c.price) || c.price < 100)
 		e.price = "The price must be at least ৳100.";
 	if (
