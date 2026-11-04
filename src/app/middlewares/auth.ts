@@ -1,3 +1,4 @@
+/// <reference path="../interfaces/express.d.ts" />
 import type { Request, RequestHandler, Response } from "express";
 import httpStatus from "http-status";
 import type { Role, User } from "../../generated/prisma/client.js";
