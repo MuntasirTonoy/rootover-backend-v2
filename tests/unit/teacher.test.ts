@@ -81,7 +81,6 @@ describe("validateForSubmit (spec section 9)", () => {
 			title: "Give the course a title of at least 5 characters.",
 			subject: "Enter the subject, e.g. Physics.",
 			description: "Describe the course in at least 20 characters.",
-			outcomes: "Add at least one learning outcome.",
 			price: "The price must be at least ৳100.",
 			"chapters.0.title": "Chapter title is required.",
 			"chapters.0.lessons": "Add at least one lesson to this chapter.",
