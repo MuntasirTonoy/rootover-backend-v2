@@ -21,7 +21,7 @@ if (config.trust_proxy) app.set("trust proxy", config.trust_proxy);
 
 // Security headers + strict CORS (a wildcard origin can't be combined with credentials)
 app.use(helmet());
-app.use(cors({ origin: config.frontend_url, credentials: true }));
+app.use(cors({ origin: config.cors_origins, credentials: true }));
 
 // Request logging
 if (config.env !== "test")

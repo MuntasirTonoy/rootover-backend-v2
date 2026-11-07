@@ -158,11 +158,25 @@ if (!parsed.success) {
 
 const env = parsed.data;
 
+// CORS origins: FRONTEND_URL plus its www / bare-domain twin, so the site
+// works whether visitors type rootover.site or www.rootover.site
+const corsOrigins = (() => {
+	const url = new URL(env.FRONTEND_URL);
+	const twin = new URL(url.origin);
+	const isIp = /^[\d.]+$|^\[/.test(url.hostname);
+	if (url.hostname !== "localhost" && !isIp)
+		twin.hostname = url.hostname.startsWith("www.")
+			? url.hostname.slice(4)
+			: `www.${url.hostname}`;
+	return [...new Set([url.origin, twin.origin])];
+})();
+
 export default {
 	env: env.NODE_ENV,
 	port: env.PORT,
 	database_url: env.DATABASE_URL,
-	frontend_url: env.FRONTEND_URL,
+	frontend_url: env.FRONTEND_URL.replace(/\/$/, ""),
+	cors_origins: corsOrigins,
 	demo_mode: env.DEMO_MODE,
 	trust_proxy: env.TRUST_PROXY,
 	jwt: {

@@ -13,7 +13,7 @@
 - **Formatting & Linting**: Biome (`@biomejs/biome`): tabs, double quotes.
 - **Dev Server**: `tsx watch` for hot-reloading.
 - **Validation**: `zod` (v4); env is validated at startup in `src/config/index.ts`.
-- **Security**: `helmet`, `cors` (only `FRONTEND_URL`), `express-rate-limit`, 1 MB JSON limit.
+- **Security**: `helmet`, `cors` (only `FRONTEND_URL` and its www / bare-domain twin, `config.cors_origins`), `express-rate-limit`, 1 MB JSON limit.
 - **Authentication**: Passport (`passport-local` for login, `passport-jwt` for `Authorization: Bearer` access tokens, no sessions), `bcryptjs` password hashes, `jsonwebtoken` (HS256, 7-day expiry). Role and ban status live in the database and are reloaded on every request.
 - **File storage**: Cloudinary (`cloudinary`, `multer` memory storage). Avatars and thumbnails are public; teacher-application documents are `authenticated` assets served through signed URLs.
 

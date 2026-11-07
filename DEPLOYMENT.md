@@ -57,8 +57,10 @@ Invalid environment variables:
 ```
 
 "not set" means the variable is missing and fell back to its localhost default.
-`FRONTEND_URL` must match the address in the browser bar exactly (no trailing
-`/`, `www` or not), because it is the only origin CORS allows.
+`FRONTEND_URL` is the origin CORS allows. Its `www` / bare-domain twin is
+allowed too (`https://rootover.site` also allows `https://www.rootover.site`
+and the other way round). Any other address (another domain, a Vercel preview
+URL) is blocked.
 
 ### Google sign-in
 
