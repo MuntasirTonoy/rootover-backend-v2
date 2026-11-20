@@ -24,7 +24,10 @@ import {
 	isTeacherCodeClash,
 	photoAsAvatar,
 } from "./application.approval.js";
-import { feeRequestEmail } from "./application.emails.js";
+import {
+	feeRequestEmail,
+	newApplicationAdminEmail,
+} from "./application.emails.js";
 import {
 	toApplicationResponse,
 	toRegistrationFeeResponse,
@@ -100,7 +103,47 @@ const submit = async (user: User, input: SubmitInput) => {
 		);
 		return application;
 	});
+	await notifyAdmins(created, user.email);
 	return toApplicationResponse(created);
+};
+
+// Emails every active admin about a new application (user's request,
+// 2026-11-20): one email each, so admins don't see each other's addresses.
+// Best-effort and after the submission is saved: a mail outage never fails it.
+// Awaited, not fire-and-forget, because a serverless host may stop the
+// function once the response is sent.
+const notifyAdmins = async (
+	application: { id: string; fullName: string; submittedAt: Date },
+	applicantEmail: string,
+) => {
+	try {
+		const admins = await prisma.user.findMany({
+			where: {
+				role: "admin",
+				status: "active",
+				emailVerifiedAt: { not: null },
+			},
+			select: { email: true },
+		});
+		const results = await Promise.allSettled(
+			admins.map((a) =>
+				sendMail(
+					newApplicationAdminEmail(a.email, application, applicantEmail),
+				),
+			),
+		);
+		const failed = results.filter((r) => r.status === "rejected");
+		if (failed.length)
+			console.error(
+				`[application] ${failed.length}/${admins.length} admin alerts failed for ${application.id}`,
+				(failed[0] as PromiseRejectedResult).reason,
+			);
+	} catch (err) {
+		console.error(
+			`[application] couldn't alert admins about ${application.id}`,
+			err,
+		);
+	}
 };
 
 const DOC_FIELDS = [

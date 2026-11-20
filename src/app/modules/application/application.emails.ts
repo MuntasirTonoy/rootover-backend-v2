@@ -53,3 +53,53 @@ ${stepsList([
 		}),
 	};
 };
+
+// Sent to every admin when a teacher application is submitted (user's request,
+// 2026-11-20). Only the applicant's name and account email: identity numbers
+// and documents stay in the admin dashboard, never in an inbox.
+export const newApplicationAdminEmail = (
+	to: string,
+	application: { fullName: string; submittedAt: Date },
+	applicantEmail: string,
+): Mail => {
+	const url = `${config.frontend_url}/admin/teacher-applications`;
+	const when = application.submittedAt.toLocaleString("en-GB", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZone: "Asia/Dhaka",
+	});
+	return {
+		to,
+		subject: `New teacher application: ${application.fullName}`,
+		text: [
+			"A new teacher application is waiting for review on Root Over Education.",
+			"",
+			`Applicant: ${application.fullName}`,
+			`Account: ${applicantEmail}`,
+			`Submitted: ${when} (Dhaka time)`,
+			"",
+			`Review it: ${url}`,
+			"",
+			"Root Over Education",
+		].join("\n"),
+		html: emailLayout({
+			preheader: `${application.fullName} applied to become a teacher.`,
+			heading: "New teacher application",
+			body: `
+<p style="margin:0 0 12px">A new teacher application is waiting for review.</p>
+${detailsTable([
+	["Applicant", application.fullName],
+	["Account", applicantEmail],
+	["Submitted", `${when} (Dhaka time)`],
+	["Status", "Pending review"],
+])}
+<p style="margin:0 0 12px">Open the admin dashboard to check the documents, then request the registration fee or reject the application.</p>`,
+			cta: { label: "Review the application", url },
+			footnote:
+				"You're receiving this because you're an admin of Root Over Education.",
+		}),
+	};
+};
