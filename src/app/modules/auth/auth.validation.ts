@@ -32,6 +32,10 @@ const register = z.object({
 	}),
 });
 
+// After a 409 DEVICE_LIMIT, the login is repeated with the id of the device to
+// log out (one of the error's `devices`)
+const replaceSessionIdSchema = z.string().min(1).max(64).optional();
+
 // Only shape checks here; wrong credentials are reported by the local strategy
 const login = z.object({
 	body: z.object({
@@ -42,6 +46,7 @@ const login = z.object({
 		password: z
 			.string({ error: "Enter your password." })
 			.min(1, "Enter your password."),
+		replaceSessionId: replaceSessionIdSchema,
 	}),
 });
 
@@ -68,6 +73,7 @@ const google = z.object({
 			.string({ error: "Google sign-in failed. Please try again." })
 			.min(20, "Google sign-in failed. Please try again.")
 			.max(4096, "Google sign-in failed. Please try again."),
+		replaceSessionId: replaceSessionIdSchema,
 	}),
 });
 

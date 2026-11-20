@@ -21,6 +21,12 @@ export const runStrategy = (
 		)(req, res, () => undefined);
 	});
 
+// The device id that lib/passport.ts passes as info on success
+const sessionIdOf = (info: unknown) =>
+	typeof info === "object" && info !== null && "sid" in info
+		? String(info.sid)
+		: undefined;
+
 const isExpired = (info: unknown) =>
 	info instanceof Error && info.name === "TokenExpiredError";
 
@@ -47,6 +53,7 @@ const auth =
 			);
 
 		req.user = user;
+		req.sessionId = sessionIdOf(info);
 		next();
 	};
 
@@ -54,8 +61,11 @@ const auth =
 // No token, an invalid/expired token or a banned account continue as a guest.
 export const optionalAuth: RequestHandler = async (req, res, next) => {
 	if (req.headers.authorization) {
-		const { user } = await runStrategy("jwt", req, res);
-		if (user && user.status === "active") req.user = user;
+		const { user, info } = await runStrategy("jwt", req, res);
+		if (user && user.status === "active") {
+			req.user = user;
+			req.sessionId = sessionIdOf(info);
+		}
 	}
 	next();
 };

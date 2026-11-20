@@ -3,7 +3,8 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import app from "../../src/app.js";
 import prisma from "../../src/app/lib/prisma.js";
-import { signAccessToken } from "../../src/app/modules/auth/auth.utils.js";
+import { openSession } from "../../src/app/modules/session/session.service.js";
+import { TEST_USER_AGENT } from "./test-device.js";
 
 export { prisma };
 
@@ -14,10 +15,16 @@ export const startApp = () => {
 };
 
 // A real access token for a seeded user, without spending the login rate limit
+// or hitting the device limit. Its device is marked TEST_USER_AGENT and removed
+// after each file (tests/db/setup.ts).
 export const tokenFor = async (userId: string) =>
-	signAccessToken(
-		await prisma.user.findUniqueOrThrow({ where: { id: userId } }),
-	);
+	(
+		await openSession(
+			prisma,
+			await prisma.user.findUniqueOrThrow({ where: { id: userId } }),
+			{ userAgent: TEST_USER_AGENT },
+		)
+	).token;
 
 export const api =
 	(base: string) =>

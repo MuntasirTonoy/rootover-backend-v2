@@ -21,11 +21,13 @@ export const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
 	config.bcrypt_salt_rounds,
 );
 
-export const signAccessToken = (user: User) => {
+// `sessionId` is the LoginSession row the token belongs to (modules/session)
+export const signAccessToken = (user: User, sessionId: string) => {
 	const payload: AccessTokenPayload = {
 		sub: user.id,
 		role: user.role,
 		v: user.tokenVersion,
+		sid: sessionId,
 	};
 	return jwt.sign(payload, config.jwt.access_secret, {
 		algorithm: "HS256",

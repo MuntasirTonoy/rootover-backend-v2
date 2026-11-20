@@ -7,4 +7,6 @@ export interface AccessTokenPayload {
 	role: Role;
 	// User.tokenVersion at issue time; a mismatch means the token was revoked
 	v: number;
+	// LoginSession id (the device). Deleting that row revokes the token.
+	sid: string;
 }

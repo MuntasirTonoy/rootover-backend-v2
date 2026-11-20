@@ -141,6 +141,7 @@ model User {
   emailOtps        EmailOtp[]
   payments         Payment[]
   uploads          Upload[]
+  loginSessions    LoginSession[]
 }
 
 model TeacherProfile {
@@ -453,6 +454,29 @@ model PlatformSettings {
 
 // One-time email codes (sign-up verification, password reset, admin settings). Only an HMAC of
 // the code is stored. Issuing a new code consumes the previous ones.
+// One row per signed-in device (user's request, 2026-11-20). Its id is the
+// access token's `sid`: deleting the row signs that device out. Students may
+// have at most MAX_STUDENT_DEVICES rows (modules/session).
+model LoginSession {
+  id         String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Parsed from the User-Agent at login, for the "Logged-in devices" list
+  browser    String
+  os         String
+  // desktop | mobile | tablet
+  deviceType String
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  // Updated at most every few minutes while the token is in use
+  lastSeenAt DateTime @default(now())
+  // The token's own expiry; expired rows don't count and are swept at login
+  expiresAt  DateTime
+
+  @@index([userId, expiresAt])
+}
+
 model EmailOtp {
   id         String     @id @default(cuid())
   userId     String

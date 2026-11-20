@@ -318,6 +318,8 @@ const setUserRole = async (
 			where: { id },
 			data: { role, tokenVersion: { increment: 1 } },
 		});
+		// Signed out everywhere; they log in again with the new role
+		await tx.loginSession.deleteMany({ where: { userId: id } });
 		await logActivity(
 			tx,
 			admin,

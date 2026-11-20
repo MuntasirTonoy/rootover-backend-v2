@@ -4,11 +4,8 @@ import type { User } from "../../../generated/prisma/client.js";
 import AppError from "../../errors/AppError.js";
 import prisma from "../../lib/prisma.js";
 import { AVATAR_PRESETS } from "../../utils/constants.js";
-import {
-	hashPassword,
-	signAccessToken,
-	verifyPassword,
-} from "../auth/auth.utils.js";
+import { hashPassword, verifyPassword } from "../auth/auth.utils.js";
+import { SessionService } from "../session/session.service.js";
 import { ownPublicUpload } from "../upload/upload.service.js";
 import { toUserResponse } from "./user.utils.js";
 import type { UserValidation } from "./user.validation.js";
@@ -27,7 +24,13 @@ const checkAvatar = async (user: User, avatar: string | null | undefined) => {
 		});
 };
 
-const updateMe = async (user: User, input: UpdateMeInput) => {
+// `sessionId` is the device making the change; it stays signed in after a
+// password change
+const updateMe = async (
+	user: User,
+	input: UpdateMeInput,
+	sessionId: string | undefined,
+) => {
 	const { password, currentPassword, ...profile } = input;
 	await checkAvatar(user, profile.avatar);
 
@@ -46,16 +49,21 @@ const updateMe = async (user: User, input: UpdateMeInput) => {
 			{ currentPassword: "Your current password is incorrect." },
 		);
 
-	// Bumping tokenVersion signs out every other device; this one gets a fresh token
-	const updated = await prisma.user.update({
-		where: { id: user.id },
-		data: {
-			...profile,
-			passwordHash: await hashPassword(password),
-			tokenVersion: { increment: 1 },
-		},
-	});
-	return { user: toUserResponse(updated), token: signAccessToken(updated) };
+	// Every other device is logged out (its LoginSession deleted, and tokenVersion
+	// bumped); this one keeps its session with a fresh token
+	const passwordHash = await hashPassword(password);
+	const [updated] = await prisma.$transaction([
+		prisma.user.update({
+			where: { id: user.id },
+			data: { ...profile, passwordHash, tokenVersion: { increment: 1 } },
+		}),
+		SessionService.endAll(prisma, user.id, sessionId),
+	]);
+	if (!sessionId) return { user: toUserResponse(updated) };
+	return {
+		user: toUserResponse(updated),
+		token: await SessionService.reissueToken(updated, sessionId),
+	};
 };
 
 export const UserService = { updateMe };

@@ -13,6 +13,8 @@ export type ErrorCode =
 	| "EMAIL_NOT_VERIFIED"
 	// 502: bKash failed or didn't answer
 	| "PAYMENT_GATEWAY"
+	// 409 at login: a student is already signed in on the maximum number of devices
+	| "DEVICE_LIMIT"
 	| "INTERNAL";
 
 const codeByStatus: Record<number, ErrorCode> = {
@@ -31,6 +33,8 @@ class AppError extends Error {
 	statusCode: number;
 	code: ErrorCode;
 	fields?: Record<string, string>;
+	// Extra keys sent inside `error` (e.g. `devices` with DEVICE_LIMIT)
+	extra?: Record<string, unknown>;
 
 	constructor(
 		statusCode: number,
@@ -38,12 +42,14 @@ class AppError extends Error {
 		fields?: Record<string, string>,
 		// Overrides the code derived from the status (e.g. 403 EMAIL_NOT_VERIFIED)
 		code?: ErrorCode,
+		extra?: Record<string, unknown>,
 	) {
 		super(message);
 		this.name = "AppError";
 		this.statusCode = statusCode;
 		this.code = code ?? codeByStatus[statusCode] ?? "INTERNAL";
 		this.fields = fields;
+		this.extra = extra;
 	}
 }
 

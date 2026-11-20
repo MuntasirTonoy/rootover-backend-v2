@@ -31,6 +31,7 @@ export default defineConfig({
 				test: {
 					name: "db",
 					include: ["tests/db/**/*.test.ts"],
+					setupFiles: ["tests/db/setup.ts"],
 					fileParallelism: false,
 					// Long end-to-end flows make many Neon round trips
 					testTimeout: 120_000,

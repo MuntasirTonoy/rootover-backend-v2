@@ -9,7 +9,12 @@ import handlePrismaError, {
 import handleZodError from "../errors/handleZodError.js";
 
 interface ErrorBody {
-	error: { code: ErrorCode; message: string; fields?: Record<string, string> };
+	error: {
+		code: ErrorCode;
+		message: string;
+		fields?: Record<string, string>;
+		[key: string]: unknown;
+	};
 }
 
 // body-parser errors carry a `type` and an HTTP status
@@ -39,6 +44,7 @@ const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
 				code: appError.code,
 				message: appError.message,
 				fields: appError.fields,
+				...(err instanceof AppError ? err.extra : undefined),
 			},
 		};
 	} else if (err instanceof ZodError) {

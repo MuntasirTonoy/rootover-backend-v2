@@ -5,5 +5,10 @@ declare global {
 		// Passport types req.user as Express.User; make that our database user.
 		// It has to be an interface (not a type alias) so it merges with Passport's.
 		interface User extends DbUser {}
+
+		interface Request {
+			// The LoginSession (device) of the access token, set by auth() / optionalAuth
+			sessionId?: string;
+		}
 	}
 }

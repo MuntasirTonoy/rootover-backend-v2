@@ -31,11 +31,14 @@ async function main() {
 	if (user.role !== "student")
 		fail(`${email} is a ${user.role}; only student accounts can be promoted.`);
 
-	await prisma.user.update({
-		where: { id: user.id },
-		// Signs out the account's existing sessions; it logs in again as an admin
-		data: { role: "admin", tokenVersion: { increment: 1 } },
-	});
+	// Signs out the account's existing sessions; it logs in again as an admin
+	await prisma.$transaction([
+		prisma.user.update({
+			where: { id: user.id },
+			data: { role: "admin", tokenVersion: { increment: 1 } },
+		}),
+		prisma.loginSession.deleteMany({ where: { userId: user.id } }),
+	]);
 	console.log(`${email} is now an admin. Log in again to use the admin area.`);
 }
 

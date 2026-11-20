@@ -22,10 +22,13 @@ import {
 	OTP_RESEND_COOLDOWN_SECONDS,
 } from "./auth.otp.js";
 import {
+	type SessionContext,
+	SessionService,
+} from "../session/session.service.js";
+import {
 	DUMMY_PASSWORD_HASH,
 	hashPassword,
 	normaliseEmail,
-	signAccessToken,
 	verifyPassword,
 } from "./auth.utils.js";
 import type { AuthValidation } from "./auth.validation.js";
@@ -46,8 +49,10 @@ const VERIFICATION_SENT =
 const RESET_SENT =
 	"If an account exists for this email, we've sent it a password reset code.";
 
-const session = (user: User) => ({
-	token: signAccessToken(user),
+// Signs the user in on a new device (modules/session: students are limited to
+// MAX_STUDENT_DEVICES; over the limit this throws 409 DEVICE_LIMIT)
+const session = async (user: User, ctx: SessionContext) => ({
+	token: (await SessionService.startSession(user, ctx)).token,
 	user: toUserResponse(user),
 });
 
@@ -130,7 +135,7 @@ const register = async (input: Body<"register">) => {
 };
 
 // Confirms the sign-up code and signs the user in
-const verifyEmail = async (input: Body<"verifyEmail">) => {
+const verifyEmail = async (input: Body<"verifyEmail">, ctx: SessionContext) => {
 	const user = await prisma.user.findUnique({
 		where: { email: normaliseEmail(input.email) },
 	});
@@ -145,7 +150,7 @@ const verifyEmail = async (input: Body<"verifyEmail">) => {
 	const verified = await markVerified(user);
 	if (verified.status === "banned")
 		throw new AppError(httpStatus.FORBIDDEN, BANNED_MESSAGE);
-	return session(verified);
+	return session(verified, ctx);
 };
 
 // Marks the email verified (by code or by Google). The first account of a new
@@ -210,7 +215,7 @@ const unusablePasswordHash = () =>
 
 // POST /api/auth/google: signs in with Google, creating the account on first
 // use. Google has verified the email, so no code is needed.
-const googleLogin = async (input: Body<"google">) => {
+const googleLogin = async (input: Body<"google">, ctx: SessionContext) => {
 	const profile = await verifyGoogleToken(input.credential);
 	let user = await prisma.user.findUnique({ where: { email: profile.email } });
 
@@ -251,7 +256,7 @@ const googleLogin = async (input: Body<"google">) => {
 	if (!user.emailVerifiedAt) user = await markVerified(user);
 	if (user.status === "banned")
 		throw new AppError(httpStatus.FORBIDDEN, BANNED_MESSAGE);
-	return session(user);
+	return session(user, ctx);
 };
 
 // Runs after the response is sent. Looking the account up and emailing it in
@@ -304,14 +309,18 @@ const resetPassword = async (input: Body<"resetPassword">) => {
 	if (!user) throw invalidCode();
 
 	await consumeOtp(user.id, "reset_password", input.code);
-	await prisma.user.update({
-		where: { id: user.id },
-		data: {
-			passwordHash: await hashPassword(input.password),
-			tokenVersion: { increment: 1 },
-			emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
-		},
-	});
+	const passwordHash = await hashPassword(input.password);
+	await prisma.$transaction([
+		prisma.user.update({
+			where: { id: user.id },
+			data: {
+				passwordHash,
+				tokenVersion: { increment: 1 },
+				emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+			},
+		}),
+		SessionService.endAll(prisma, user.id),
+	]);
 	return { message: "Your password has been reset. You can now log in." };
 };
 

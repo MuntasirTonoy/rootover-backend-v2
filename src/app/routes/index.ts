@@ -21,6 +21,7 @@ import { SettingsService } from "../modules/settings/settings.service.js";
 import { TeacherRoutes } from "../modules/teacher/teacher.route.js";
 import { TeachersRoutes } from "../modules/teachers/teachers.route.js";
 import { UploadRoutes } from "../modules/upload/upload.route.js";
+import { SessionRoutes } from "../modules/session/session.route.js";
 import { UserRoutes } from "../modules/user/user.route.js";
 
 import { CLEARING_DAYS, MIN_WITHDRAWAL } from "../utils/pricing.js";
@@ -54,6 +55,7 @@ router.get("/config", async (req: Request, res: Response) => {
 // Every feature module registers here; all paths are under /api
 const moduleRoutes: { path: string; route: Router }[] = [
 	{ path: "/auth", route: AuthRoutes },
+	{ path: "/me/sessions", route: SessionRoutes },
 	{ path: "/me", route: UserRoutes },
 	{ path: "/me", route: StudentRoutes },
 	{ path: "/me", route: ApplicationMeRoutes },
