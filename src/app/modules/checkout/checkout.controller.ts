@@ -21,4 +21,19 @@ const checkout = async (req: Request, res: Response) => {
 	res.status(httpStatus.CREATED).json(result);
 };
 
-export const CheckoutController = { quote, validCoupons, checkout };
+const cartQuote = async (req: Request, res: Response) => {
+	res.json(await CheckoutService.cartQuote(req.user, req.body));
+};
+
+const cartCheckout = async (req: Request, res: Response) => {
+	const result = await CheckoutService.cartCheckout(currentUser(req), req.body);
+	res.status(httpStatus.CREATED).json(result);
+};
+
+export const CheckoutController = {
+	quote,
+	validCoupons,
+	checkout,
+	cartQuote,
+	cartCheckout,
+};

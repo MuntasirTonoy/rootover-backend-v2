@@ -25,8 +25,25 @@ const checkout = z.object({
 	}),
 });
 
+// The cart: up to MAX_CART_ITEMS different courses, each with an optional coupon
+export const MAX_CART_ITEMS = 20;
+const cart = z.object({
+	body: z.object({
+		items: z
+			.array(z.object({ courseId, couponCode }), {
+				error: "Your cart is empty.",
+			})
+			.min(1, "Your cart is empty.")
+			.max(MAX_CART_ITEMS, `Buy at most ${MAX_CART_ITEMS} courses at once.`)
+			.refine(
+				(items) => new Set(items.map((i) => i.courseId)).size === items.length,
+				"Each course can only be in the cart once.",
+			),
+	}),
+});
+
 const validCoupons = z.object({
 	params: z.object({ courseId: z.string().min(1).max(64) }),
 });
 
-export const CheckoutValidation = { quote, checkout, validCoupons };
+export const CheckoutValidation = { quote, checkout, cart, validCoupons };

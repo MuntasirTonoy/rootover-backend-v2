@@ -239,6 +239,7 @@ model Course {
   savedLessons SavedLesson[]
   videoReports VideoReport[]
   payments     Payment[]
+  paymentItems PaymentItem[]
 
   @@index([status])
   @@index([teacherId])
@@ -292,7 +293,8 @@ model Coupon {
   active     Boolean        @default(true)
   createdAt  DateTime       @default(now())
 
-  payments Payment[]
+  payments     Payment[]
+  paymentItems PaymentItem[]
 
   @@unique([teacherId, code])
 }
@@ -313,14 +315,17 @@ model Purchase {
   commission     Int
   teacherNet     Int
   method         PaymentMethod
-  trxId          String         @unique
+  // The bKash transaction; courses bought together in one cart share it
+  trxId          String
   status         PurchaseStatus @default(completed)
   createdAt      DateTime       @default(now())
 
-  enrollment Enrollment?
-  payment    Payment?
+  enrollment  Enrollment?
+  payment     Payment?
+  paymentItem PaymentItem?
 
   @@index([teacherId, createdAt])
+  @@index([trxId])
   @@index([studentId])
   @@index([courseId])
 }
@@ -542,8 +547,35 @@ model Payment {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
+  // Course purchases: one row per course (a cart has several). Payments made
+  // before the cart (2026-11-20) have none and use courseId/quote/couponId.
+  items PaymentItem[]
+
   @@index([userId, createdAt])
   @@index([state, createdAt])
+}
+
+// One course of a course payment (cart, user's request 2026-11-20). Each
+// course has its own coupon and quote; the payment's amount is their total.
+model PaymentItem {
+  id         String    @id @default(cuid())
+  paymentId  String
+  payment    Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  courseId   String
+  course     Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  // Coupon use reserved at creation (released with the payment's couponReleased)
+  couponId   String?
+  coupon     Coupon?   @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  // Quote & { couponCode }: what this course costs in the payment
+  quote      Json
+  amount     Int
+  // Set once bKash confirmed and the purchase was written
+  purchaseId String?   @unique
+  purchase   Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  // Paid but not granted (already owned when the payment completed): refund due
+  refundNote String?
+
+  @@index([paymentId])
 }
 
 enum UploadPurpose {

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import auth from "../../middlewares/auth.js";
+import auth, { optionalAuth } from "../../middlewares/auth.js";
 import validateRequest from "../../middlewares/validateRequest.js";
 import { CheckoutController } from "./checkout.controller.js";
 import { CheckoutValidation } from "./checkout.validation.js";
@@ -19,6 +19,19 @@ router.get(
 	auth(),
 	validateRequest(CheckoutValidation.validCoupons),
 	CheckoutController.validCoupons,
+);
+// Guests may price a cart too (a cart is filled before logging in)
+router.post(
+	"/cart/quote",
+	optionalAuth,
+	validateRequest(CheckoutValidation.cart),
+	CheckoutController.cartQuote,
+);
+router.post(
+	"/cart",
+	auth(),
+	validateRequest(CheckoutValidation.cart),
+	CheckoutController.cartCheckout,
 );
 router.post(
 	"/",

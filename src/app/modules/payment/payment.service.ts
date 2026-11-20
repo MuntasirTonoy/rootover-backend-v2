@@ -43,6 +43,10 @@ type Tx = Prisma.TransactionClient;
 
 // A payment nobody came back from is expired after this, releasing its coupon
 const PAYMENT_TTL_MS = 30 * 60 * 1000;
+// Recording a paid cart writes several rows per course, with a Neon round trip
+// each. The money is already taken by then, so the transaction must not time
+// out (Prisma's default is 5 s).
+const FULFIL_TX = { maxWait: 10_000, timeout: 60_000 };
 export const COUPON_EXHAUSTED = "This coupon has reached its usage limit.";
 
 const callbackURL = () =>
@@ -65,21 +69,37 @@ const claimCoupon = async (tx: Tx, couponId: string) => {
 	return count === 1;
 };
 
-// Gives the reserved use back, once
+// Every coupon use a payment reserved: one per course item (a cart may use the
+// same coupon twice), or the payment's own coupon for pre-cart payments
+const reservedCoupons = async (
+	tx: Tx,
+	payment: Pick<Payment, "id" | "couponId">,
+) => {
+	const items = await tx.paymentItem.findMany({
+		where: { paymentId: payment.id, couponId: { not: null } },
+		select: { couponId: true },
+	});
+	const ids = items.map((i) => i.couponId as string);
+	return payment.couponId ? [...ids, payment.couponId] : ids;
+};
+
+// Gives the reserved uses back, once
 const releaseCoupon = async (
 	tx: Tx,
 	payment: Pick<Payment, "id" | "couponId">,
 ) => {
-	if (!payment.couponId) return;
+	const coupons = await reservedCoupons(tx, payment);
+	if (!coupons.length) return;
 	const { count } = await tx.payment.updateMany({
 		where: { id: payment.id, couponReleased: false },
 		data: { couponReleased: true },
 	});
 	if (count)
-		await tx.coupon.updateMany({
-			where: { id: payment.couponId, usedCount: { gt: 0 } },
-			data: { usedCount: { decrement: 1 } },
-		});
+		for (const id of coupons)
+			await tx.coupon.updateMany({
+				where: { id, usedCount: { gt: 0 } },
+				data: { usedCount: { decrement: 1 } },
+			});
 };
 
 // Payments left at bKash for longer than the TTL stop holding coupon uses
@@ -129,29 +149,43 @@ const openPayment = async (payment: Payment, user: User) => {
 
 // ------------------------------------------------------------ start
 
-export interface CoursePaymentInput {
+// One course of a payment: "Buy now" has one, a cart several
+export interface CoursePaymentLine {
 	course: { id: string; title: string; teacherId: string };
 	coupon: { id: string; code: string } | null;
 	quote: Quote;
 }
 
-// The caller has already checked the buyer, the course, ownership and the coupon
-const startCoursePayment = async (user: User, input: CoursePaymentInput) => {
+// The caller has already checked the buyer, the courses, ownership and the
+// coupons. `couponField(i)` names the field a used-up coupon is reported on.
+const startCoursePayment = async (
+	user: User,
+	lines: CoursePaymentLine[],
+	couponField: (index: number) => string = () => "couponCode",
+) => {
 	await expireStalePayments();
 	const payment = await prisma.$transaction(async (tx) => {
-		if (input.coupon && !(await claimCoupon(tx, input.coupon.id)))
-			throw new AppError(httpStatus.UNPROCESSABLE_ENTITY, COUPON_EXHAUSTED, {
-				couponCode: COUPON_EXHAUSTED,
-			});
+		for (const [i, line] of lines.entries())
+			if (line.coupon && !(await claimCoupon(tx, line.coupon.id)))
+				throw new AppError(httpStatus.UNPROCESSABLE_ENTITY, COUPON_EXHAUSTED, {
+					[couponField(i)]: COUPON_EXHAUSTED,
+				});
 		return tx.payment.create({
 			data: {
 				purpose: "course_purchase",
 				provider: paymentProvider.name,
 				userId: user.id,
-				courseId: input.course.id,
-				couponId: input.coupon?.id ?? null,
-				quote: { ...input.quote, couponCode: input.coupon?.code ?? null },
-				amount: input.quote.total,
+				// Kept for a single course so older views still show it
+				courseId: lines.length === 1 ? lines[0].course.id : null,
+				amount: lines.reduce((sum, l) => sum + l.quote.total, 0),
+				items: {
+					create: lines.map((l) => ({
+						courseId: l.course.id,
+						couponId: l.coupon?.id ?? null,
+						quote: { ...l.quote, couponCode: l.coupon?.code ?? null },
+						amount: l.quote.total,
+					})),
+				},
 			},
 		});
 	});
@@ -187,35 +221,83 @@ const startFeePayment = async (user: User, applicationId: string) => {
 
 // ------------------------------------------------------------ finish
 
-// Writes what was paid for. If that's no longer possible (the course was bought
-// meanwhile, the application was rejected) the payment is marked failed with a
-// reason that asks for a refund; the trxId stays on it for support.
-const fulfil = async (
+type LineQuote = Quote & { couponCode: string | null };
+
+export const ALREADY_OWNED_REFUND =
+	"You already own this course. Contact support for a refund.";
+
+// The courses of a confirmed course payment: its items, or for a payment made
+// before the cart, its own course and quote
+const courseLines = async (tx: Tx, payment: Payment) => {
+	const items = await tx.paymentItem.findMany({
+		where: { paymentId: payment.id },
+		orderBy: { id: "asc" },
+	});
+	if (items.length)
+		return items.map((i) => ({
+			itemId: i.id as string | null,
+			courseId: i.courseId,
+			couponId: i.couponId,
+			quote: i.quote as unknown as LineQuote,
+		}));
+	return [
+		{
+			itemId: null,
+			courseId: payment.courseId ?? "",
+			couponId: payment.couponId,
+			quote: payment.quote as unknown as LineQuote,
+		},
+	];
+};
+
+// Writes a purchase + enrollment for each course. A course the buyer already
+// owns by now (bought elsewhere while paying) is skipped and its item marked
+// for a refund; if that leaves nothing, the payment fails asking for a refund.
+const fulfilCourses = async (
 	tx: Tx,
 	payment: Payment,
-	outcome: { trxId: string; payerNumber?: string },
+	user: User,
+	trxId: string,
 ) => {
-	const user = await tx.user.findUniqueOrThrow({
-		where: { id: payment.userId },
-	});
+	const lines = await courseLines(tx, payment);
 
-	if (payment.purpose === "course_purchase") {
-		const q = payment.quote as unknown as Quote & { couponCode: string | null };
-		const course = await tx.course.findUniqueOrThrow({
-			where: { id: payment.courseId ?? "" },
-			select: { id: true, title: true, teacherId: true },
-		});
-		// An expired payment gave its coupon use back; take it again if possible.
-		// The buyer paid the discounted price either way.
-		if (
-			payment.couponId &&
-			payment.couponReleased &&
-			(await claimCoupon(tx, payment.couponId))
-		)
+	// An expired payment gave its coupon uses back; take them again if possible.
+	// The buyer paid the discounted prices either way.
+	if (payment.couponReleased) {
+		let claimed = false;
+		for (const line of lines)
+			if (line.couponId && (await claimCoupon(tx, line.couponId)))
+				claimed = true;
+		if (claimed)
 			await tx.payment.update({
 				where: { id: payment.id },
 				data: { couponReleased: false },
 			});
+	}
+
+	const purchaseIds: string[] = [];
+	for (const line of lines) {
+		const q = line.quote;
+		const course = await tx.course.findUniqueOrThrow({
+			where: { id: line.courseId },
+			select: { id: true, title: true, teacherId: true },
+		});
+		const owned = await tx.enrollment.findUnique({
+			where: {
+				studentId_courseId: { studentId: user.id, courseId: course.id },
+			},
+			select: { id: true },
+		});
+		if (owned) {
+			if (line.itemId)
+				await tx.paymentItem.update({
+					where: { id: line.itemId },
+					data: {
+						refundNote: `Already owned when the payment completed: ৳${q.total} to refund.`,
+					},
+				});
+			continue;
+		}
 		const purchase = await tx.purchase.create({
 			data: {
 				studentId: user.id,
@@ -230,7 +312,7 @@ const fulfil = async (
 				commission: q.commission,
 				teacherNet: q.teacherNet,
 				method: "bKash",
-				trxId: outcome.trxId,
+				trxId,
 				status: "completed",
 			},
 		});
@@ -241,14 +323,45 @@ const fulfil = async (
 				purchaseId: purchase.id,
 			},
 		});
+		if (line.itemId)
+			await tx.paymentItem.update({
+				where: { id: line.itemId },
+				data: { purchaseId: purchase.id },
+			});
 		await logActivity(
 			tx,
 			user,
 			`Purchased a course (${paymentProvider.label})`,
 			course.title,
 		);
-		return { purchaseId: purchase.id };
+		purchaseIds.push(purchase.id);
 	}
+
+	if (!purchaseIds.length)
+		throw new AppError(
+			httpStatus.UNPROCESSABLE_ENTITY,
+			lines.length === 1
+				? ALREADY_OWNED_REFUND
+				: "You already own these courses. Contact support for a refund.",
+		);
+	// The single purchase stays linked on the payment, as before the cart
+	return lines.length === 1 ? { purchaseId: purchaseIds[0] } : {};
+};
+
+// Writes what was paid for. If that's no longer possible (the course was bought
+// meanwhile, the application was rejected) the payment is marked failed with a
+// reason that asks for a refund; the trxId stays on it for support.
+const fulfil = async (
+	tx: Tx,
+	payment: Payment,
+	outcome: { trxId: string; payerNumber?: string },
+) => {
+	const user = await tx.user.findUniqueOrThrow({
+		where: { id: payment.userId },
+	});
+
+	if (payment.purpose === "course_purchase")
+		return fulfilCourses(tx, payment, user, outcome.trxId);
 
 	// A paid fee approves the application straight away (user's request,
 	// 2026-10-26): no separate admin verification step any more
@@ -315,7 +428,7 @@ const complete = async (
 						...links,
 					},
 				});
-			});
+			}, FULFIL_TX);
 		} catch (err) {
 			if (!isTeacherCodeClash(err) || attempt >= 3) throw err;
 		}
@@ -342,7 +455,7 @@ const settle = async (payment: Payment, outcome: PaymentOutcome) => {
 				: isPrismaKnownError(err) &&
 						err.code === "P2002" &&
 						payment.purpose === "course_purchase"
-					? "You already own this course. Contact support for a refund."
+					? ALREADY_OWNED_REFUND
 					: "We couldn't record this payment. Contact support with the transaction id.";
 		console.error(
 			`[payment] ${payment.id} paid (${outcome.trxId}) but not fulfilled: ${reason}`,
@@ -428,9 +541,31 @@ const getPayment = async (user: User, id: string) => {
 			course: { select: { id: true, title: true } },
 			purchase: { include: { enrollment: true } },
 			registrationFee: true,
+			items: {
+				orderBy: { id: "asc" },
+				include: { course: { select: { id: true, title: true } } },
+			},
 		},
 	});
 	if (!p) throw new AppError(httpStatus.NOT_FOUND, "Payment not found.");
+	// Every course of the payment (a payment from before the cart has just its course)
+	const items = p.items.length
+		? p.items.map((i) => ({
+				course: i.course,
+				amount: i.amount,
+				granted: !!i.purchaseId,
+				refundNote: i.refundNote ?? undefined,
+			}))
+		: p.course
+			? [
+					{
+						course: p.course,
+						amount: p.amount,
+						granted: !!p.purchaseId,
+						refundNote: undefined,
+					},
+				]
+			: [];
 	return {
 		id: p.id,
 		purpose: p.purpose,
@@ -442,6 +577,7 @@ const getPayment = async (user: User, id: string) => {
 		payerNumber: p.payerNumber ?? undefined,
 		failureReason: p.failureReason ?? undefined,
 		course: p.course ?? undefined,
+		items,
 		applicationId: p.applicationId ?? undefined,
 		purchase: p.purchase ? toPurchaseResponse(p.purchase) : undefined,
 		enrollment: p.purchase?.enrollment
